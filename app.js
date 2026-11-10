@@ -39,15 +39,53 @@ function trendScore(x){let t=`${x.name} ${x.colour||""} ${x.notes||""}`;return T
 function pickTrendAware(list){if(!list.length)return null;let ranked=[...list].sort((a,b)=>trendScore(b)-trendScore(a));let pool=ranked.slice(0,Math.min(3,ranked.length));return pool[Math.floor(Math.random()*pool.length)]}
 function trendNotes(out){let found=[];for(const x of out){let t=`${x.name} ${x.colour||""} ${x.notes||""}`;for(const cue of TREND_CUES)if(cue.re.test(t)&&!found.includes(cue.name))found.push(cue.name)}return found.slice(0,2)}
 function choose(event,temp,cond,style){let by=c=>items.filter(x=>x.category===c),pick=pickTrendAware;let top=pick(by("Tops")),bottom=pick(by("Bottoms")),layer=by("Layers"),shoe=pick(by("Shoes")),acc=pick(by("Accessories")),out=[top,bottom].filter(Boolean);if(temp<17&&layer.length)out.push(pick(layer.sort((a,b)=>b.warmth-a.warmth).slice(0,3)));if((cond==="rain"||cond==="wind")&&layer.length){let rain=layer.find(x=>/coat|rain|waterproof|jacket|shell/i.test(x.name+" "+x.notes));if(rain&&!out.includes(rain))out.push(rain)}if(shoe)out.push(shoe);if(acc&&Math.random()>.5)out.push(acc);if(style==="smart"||["Work","Dinner","Date night","Evening out"].includes(event))out.sort((a,b)=>({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[a.style]??2)-({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[b.style]??2));return out}
-$("#generate").onclick=()=>{
+
+const AI_CONFIG_KEY="wardrobe.ai.connection.v1";
+function readAIConfig(){try{return JSON.parse(localStorage.getItem(AI_CONFIG_KEY)||"{}")}catch(e){return {}}}
+function refreshAIConfig(){
+ const c=readAIConfig(),u=$("#aiWorkerUrl"),k=$("#aiAccessKey"),st=$("#aiConfigStatus");
+ if(u)u.value=c.url||"";if(k)k.value=c.token||"";
+ if(st)st.textContent=c.url&&c.token?"AI connection saved on this iPhone.":"Not connected yet. Your wardrobe photos are not uploaded; only clothing descriptions are sent.";
+}
+$("#saveAiConfig").onclick=()=>{
+ const url=$("#aiWorkerUrl").value.trim().replace(/\/+$/,""),token=$("#aiAccessKey").value.trim();
+ if(!/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/.*)?$/i.test(url)){toast("Enter your HTTPS Cloudflare Worker URL");return}
+ if(token.length<20){toast("Enter the private access key from your Worker");return}
+ localStorage.setItem(AI_CONFIG_KEY,JSON.stringify({url,token}));
+ refreshAIConfig();toast("AI connection saved on this iPhone");
+};
+function makeMannequinPrompt(out,event,temp,cond){
+ const garments=out.map(x=>`${label[x.category]}: ${x.name}${x.colour?`, ${x.colour}`:""}${x.style?`, ${x.style}`:""}${x.notes?`, ${x.notes}`:""}`).join("; ");
+ return `Create a premium photorealistic menswear fashion editorial image. Show ONE full-length, adult male mannequin with a smooth featureless matte ivory head, standing naturally, front three-quarter view, entire figure visible from head to shoes. Dress it in this exact outfit: ${garments}. Occasion: ${event}. Weather: ${temp}°C, ${cond}. Reproduce the described garments, colours, silhouettes and layering as closely as possible. Clean warm-grey studio background, soft editorial lighting, realistic fabric drape, understated contemporary British menswear, natural proportions. No text, no watermark, no extra garments, no collage, no cropped feet.`;
+}
+async function generateAIMannequin(prompt){
+ const cfg=readAIConfig();
+ if(!cfg.url||!cfg.token)throw new Error("Connect the free AI preview in the settings above first.");
+ const res=await fetch(cfg.url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+cfg.token},body:JSON.stringify({prompt})});
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok)throw new Error(data.error||`AI service returned ${res.status}. Check the Worker setup and daily free allowance.`);
+ if(!data.image)throw new Error("The AI service returned no image. Please try again.");
+ return data.image;
+}
+refreshAIConfig();
+
+$("#generate").onclick=async()=>{
  if(!items.length){toast("Add clothes first");go("wardrobe");return}
  let event=$("#event").value,temp=+$("#temp").value,cond=$("#condition").value,out=choose(event,temp,cond,$("#style").value);
- let cues=trendNotes(out);
- const boardItems=out.map(x=>`<div class="photo-look-item"><div class="photo-look-image">${x.photo?`<img src="${x.photo}" alt="${esc(x.name)}">`:`<span>◇</span>`}</div><div class="photo-look-label"><small>${label[x.category]}</small><b>${esc(x.name)}</b><small>${esc(x.colour||x.style)}</small></div></div>`).join("");
+ let cues=trendNotes(out),prompt=makeMannequinPrompt(out,event,temp,cond);
+ const pieces=out.map(x=>`<div class="outfit-piece"><div class="thumb">${x.photo?`<img src="${x.photo}" alt="${esc(x.name)}">`:"◇"}</div><div><small>${label[x.category]}</small><b>${esc(x.name)}</b><small>${esc(x.colour||x.style)}</small></div></div>`).join("");
  $("#outfit").classList.remove("hidden");
- $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware layers":cond==="cold"?"Warm layers":cond==="hot"?"Lightweight pieces":"Balanced for the conditions"}</p><div class="photo-look-board"><div class="photo-look-heading"><div class="eyebrow">BUILT FROM YOUR ACTUAL PHOTOS</div><span>WARDROBE EDIT</span></div><div class="photo-look-grid">${boardItems}</div><p class="fine">Every image above is the original photo saved in your wardrobe. No AI redraw, invented garment details or external image service.</p></div>${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
+ $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware layers":cond==="cold"?"Warm layers":cond==="hot"?"Lightweight pieces":"Balanced for the conditions"}</p><div class="ai-preview"><div class="eyebrow">AI MANNEQUIN PREVIEW</div><div class="ai-preview-status" id="aiPreviewStatus">Preparing your outfit illustration…</div><img id="aiMannequinImage" alt="AI-generated mannequin wearing the selected outfit" hidden><p class="fine">Generated from clothing names, colours and details. It is an interpretation, not an exact digital fitting. Your clothing photos are not sent to the AI service.</p></div><div class="eyebrow">THE PIECES SELECTED</div>${pieces}${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
  $("#again").onclick=()=>$("#generate").click();
- $("#saveLook").onclick=()=>{let saved=JSON.parse(localStorage.getItem("wardrobe.saved")||"[]");saved.unshift({event,ids:out.map(x=>x.id),date:new Date().toISOString(),photoBoard:true});localStorage.setItem("wardrobe.saved",JSON.stringify(saved));toast("Look saved")};
+ $("#saveLook").onclick=()=>{let saved=JSON.parse(localStorage.getItem("wardrobe.saved")||"[]");saved.unshift({event,ids:out.map(x=>x.id),date:new Date().toISOString(),mockupPrompt:prompt});localStorage.setItem("wardrobe.saved",JSON.stringify(saved));toast("Look saved")};
+ const status=$("#aiPreviewStatus"),img=$("#aiMannequinImage");
+ try{
+  status.textContent="Sending the outfit description to the free AI model. This can take a few seconds…";
+  const src=await generateAIMannequin(prompt.slice(0,2048));
+  img.onload=()=>{img.hidden=false;status.textContent="Your AI outfit mockup is ready."};
+  img.onerror=()=>{status.textContent="The AI returned an image that could not be displayed. Try again.";status.classList.add("failed")};
+  img.src=src;
+ }catch(e){status.textContent=e.message;status.classList.add("failed");}
 };
 $$(".occasions button").forEach(b=>b.onclick=()=>{go("stylist");$("#event").value=b.dataset.event});
 const looks=[["Quiet confidence","Minimal","Tonal layers, clean lines and understated texture.","#283c35","#c9c2b1","#7c8a7c"],["The modern classic","Smart casual","A relaxed jacket, crisp base layer and tailored trouser.","#9a8068","#e6e0d3","#343d38"],["Off-duty uniform","Weekend","Comfortable proportions with one considered detail.","#536b60","#d4d0c3","#8b8b78"],["Soft structure","Minimal","Neutral shades with shape and subtle contrast.","#b4aa99","#eee9df","#5e655d"],["Dinner, sorted","Smart casual","Dark foundations, tactile fabric and a sharper shoe.","#242d2b","#a88b6e","#e2ded3"],["Weekend layers","Weekend","Easy knitwear and practical outerwear.","#7b806e","#b5a48d","#303c35"]];

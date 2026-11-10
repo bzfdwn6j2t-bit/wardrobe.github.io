@@ -1,51 +1,61 @@
-# WARDROBE — iPhone PWA prototype
+# WARDROBE v6 — AI mannequin preview
 
-## Included in this prototype
-- Add individual clothing photos from the iPhone camera or photo library.
-- Store wardrobe pieces locally in the browser.
-- Categorise items by tops, bottoms, layers, shoes and accessories.
-- Generate basic outfit combinations from the wardrobe you entered.
-- Browse and save starter inspiration concepts.
-- Create a trip packing list from destination, dates, activities and a forecast lookup.
-- Installable PWA shell with a service worker.
+This release restores an actual AI-generated mannequin image in the Stylist. It uses Cloudflare Workers AI with FLUX.1 Schnell.
 
-## Important prototype limitations
-This is a working front-end prototype, not yet a production AI stylist. Item attributes are entered manually; there is no image-recognition service, account sync, cloud backup, advanced colour/fit matching or AI preference learning yet. Inspiration cards are starter visual concepts rather than a live editorial feed. Weather lookup uses the free Open-Meteo geocoding/forecast endpoints and requires internet access. Data and photos are stored in this browser on this device; clearing browser website data will remove them.
+## Important: keep your wardrobe data
 
-## Run locally
-Serve this folder over localhost (not by opening index.html as a file). For example, with Python installed:
-`python3 -m http.server 8000`
-Then visit `http://localhost:8000`.
+- Replace the existing seven website files in your GitHub Pages repository: `index.html`, `styles.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `icon.svg`, and `README.md`.
+- Do not delete the repository.
+- Do not upload `cloudflare-worker.js` to the GitHub Pages site. It is the private server-side worker code that you paste into Cloudflare.
+- Your clothing records and photos remain in the browser's IndexedDB on your iPhone. This update does not intentionally clear them.
 
-## Install on iPhone
-1. Upload the folder contents to an HTTPS static host (for example, a static site host).
-2. Open the HTTPS site in Safari on your iPhone.
-3. Tap Share → Add to Home Screen.
-4. Enable “Open as Web App” if shown, then tap Add.
+## What the AI preview does
 
-For a public production app, add secure cloud storage/authentication, server-side AI image tagging and styling, a real inspiration image/content source with licensing, and privacy/backup controls before inviting other users.
+WARDROBE selects clothes from your saved wardrobe and builds a text description using each selected item's name, colour, style and notes. Cloudflare's FLUX.1 Schnell model generates a full-length mannequin fashion image from that description.
 
+The actual wardrobe photographs are **not** uploaded to the AI provider. The generated result is an approximation: it may change garment details, patterns, fit or colour slightly. This is text-to-image, not virtual try-on.
 
-## Updated storage and trip planning
-- Clothing records and photos now use IndexedDB on the iPhone, with migration from the original localStorage collection.
-- Use **Export backup** in the Wardrobe tab to save a JSON backup to Files. Use **Restore backup** to restore it.
-- Trip planner can look up scheduled flight arrival details by flight number and flight date using Navo24's free beta schedule API. Coverage and free lookup limits apply; schedules may not be available for every airline/airport or dates beyond its published window. Always verify with the airline.
-- The app remains a free, local-first PWA hosted on GitHub Pages. There is no account sync.
+## Set up the free Cloudflare connection (one time)
 
+Cloudflare currently includes 10,000 Workers AI Neurons per day on its Free plan. FLUX.1 Schnell is included in Workers AI. The free allowance resets daily at 00:00 UTC. If the daily allowance is used up, image generation pauses until the reset; this Worker does not automatically upgrade or add paid billing.
 
-## Flight lookup robustness update
-- Flight number matching now requires an exact operating or codeshare number rather than silently selecting the first returned record.
-- Arrival parsing accepts documented `arrival_utc` timestamps and supported local-arrival fields, and uses the destination's IANA time zone when available.
-- Clearer messages distinguish missing coverage, rate limits, and missing arrival/time-zone data.
-- Flight results are scheduled timetable data, not live operational tracking; verify with the airline.
+1. Create or sign in to a free Cloudflare account: https://dash.cloudflare.com/
+2. Open **Workers & Pages** and choose **Create** / **Create Worker**.
+3. Create a Worker and give it a name such as `wardrobe-ai`.
+4. Open the Worker editor. Replace the starter code with the complete contents of `cloudflare-worker.js` from this ZIP, then save and deploy.
+5. Open the Worker **Settings** → **Bindings** (sometimes shown as **Settings → Bindings**). Add a **Workers AI** binding with the variable name exactly `AI`. Save.
+6. In **Settings** → **Variables and Secrets**, add a secret named exactly `WARDROBE_TOKEN`. Use the private key supplied in the setup instructions in this conversation. Save and redeploy if Cloudflare asks.
+7. Copy the Worker URL shown in the Cloudflare dashboard. It will look similar to `https://wardrobe-ai.your-account.workers.dev`.
 
+## Connect WARDROBE on your iPhone
 
-## AI mannequin previews and trend-aware styling
-- Each generated outfit requests a single full-body mannequin preview from the public Pollinations image endpoint. Only text descriptions of the selected clothing are sent; user-uploaded clothing photos are not sent to the image service.
-- The preview is an AI approximation based on item names, colours and notes, not an exact try-on or faithful reproduction of the photographed garments. The public free endpoint is rate-limited and availability can change; if unavailable, the outfit itself still displays.
-- Discover includes links to current menswear trend coverage and a curated trend summary. The outfit selector lightly favours matching items already in the user's wardrobe (wide-leg/relaxed silhouettes, tailored outerwear, charcoal/chocolate/green tones, leather/denim and stripes). It does not scrape fashion websites live; the editorial trend references need periodic updating.
-- No image-generation API key or paid account is required for the prototype endpoint. It is a third-party service, not an OpenAI image-generation integration.
+After GitHub Pages has updated:
 
+1. Open WARDROBE and go to **Stylist**.
+2. Under **AI MANNEQUIN PREVIEW · FREE**, paste your Worker URL.
+3. Paste the same private access key you saved as the `WARDROBE_TOKEN` secret.
+4. Tap **Save AI connection**.
+5. Generate an outfit. The preview will show a loading message while Cloudflare creates the image.
 
-## Version 5 — exact-photo outfit boards
-The Stylist now presents the selected wardrobe pieces using their original saved photos in a clean editorial outfit board. It no longer calls the third-party text-to-image service for outfit previews. This is fully free, keeps garment imagery faithful to the uploaded photos, and does not transmit those photos to an image-generation provider. It is a visual outfit board, not a photorealistic virtual try-on.
+The Worker URL and access key are saved only in this browser's local storage, not in the public GitHub repository.
+
+## Privacy and safety
+
+- Only the selected garments' text descriptions are sent to Cloudflare; the stored garment photos are not.
+- The Worker checks the website origin and requires the private bearer key.
+- FLUX.1 Schnell is listed by Cloudflare as a zero-data-retention model.
+- Do not share the private access key. If you believe it has been exposed, replace the `WARDROBE_TOKEN` secret in Cloudflare and update the saved key in WARDROBE.
+
+## Free usage and limitations
+
+Cloudflare's current Workers AI Free plan allowance is 10,000 Neurons per day. FLUX.1 Schnell is charged in Neurons according to image tiles and steps. This Worker requests a single 512×512-tile image at four steps, so the allowance should support many previews per day, but exact daily capacity can vary with model pricing and platform changes. If the free allowance is exhausted, requests fail until the daily reset. No paid plan is required for this configuration.
+
+Cloudflare's free Worker plan also has request limits. The Worker is designed for a personal wardrobe app, not public high-volume use.
+
+## Troubleshooting
+
+- **Incorrect private access key:** confirm the `WARDROBE_TOKEN` secret and the key saved in WARDROBE match exactly.
+- **Missing AI binding:** add a Workers AI binding named `AI`.
+- **Daily allowance reached:** wait until 00:00 UTC.
+- **Worker URL error:** use the complete `https://...workers.dev` URL.
+- **Old app still showing:** close and reopen the installed WARDROBE app after GitHub Pages deploys. The service-worker cache has been bumped to v6.

@@ -31,7 +31,16 @@
 <label>What's the occasion?<select id="event"><option>Everyday</option><option>Work</option><option>Smart casual</option><option>Dinner</option><option>Date night</option><option>Evening out</option><option>Travel</option><option>Outdoor</option></select></label>
 <div class="two"><label>Temperature °C<input id="temp" type="number" value="14"></label><label>Conditions<select id="condition"><option value="dry">Dry / cloudy</option><option value="rain">Rain</option><option value="wind">Windy</option><option value="hot">Hot / sunny</option><option value="cold">Cold</option></select></label></div>
 <label>Style direction<select id="style"><option value="balanced">Surprise me</option><option value="minimal">Minimal</option><option value="classic">Classic</option><option value="relaxed">Relaxed</option><option value="smart">More polished</option></select></label>
-<button class="primary wide" id="generate">Generate my outfit ✳</button></div><div id="outfit" class="panel hidden"></div>
+<button class="primary wide" id="generate">Generate my outfit ✳</button>
+<div class="ai-setup">
+ <div class="eyebrow">AI MANNEQUIN PREVIEW · FREE</div>
+ <p class="fine">Connect your free Cloudflare AI Worker once to generate a mannequin image from your selected clothing descriptions.</p>
+ <label>Cloudflare Worker URL<input id="aiWorkerUrl" type="url" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="url"></label>
+ <label>Private access key<input id="aiAccessKey" type="password" placeholder="Your private Worker key" autocomplete="off"></label>
+ <button class="secondary wide" id="saveAiConfig">Save AI connection</button>
+ <p class="fine" id="aiConfigStatus">Not connected yet. Your wardrobe photos are not uploaded; only clothing descriptions are sent.</p>
+</div>
+</div><div id="outfit" class="panel hidden"></div>
 <p class="fine">This first version uses transparent styling rules to select from your wardrobe. Preference learning and more advanced styling can be added later.</p>
 </section>
 <section class="page" id="discover">
