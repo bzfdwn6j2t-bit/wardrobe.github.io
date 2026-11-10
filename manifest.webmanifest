@@ -1,0 +1,17 @@
+{
+  "name": "WARDROBE \u2014 Personal Stylist",
+  "short_name": "WARDROBE",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f2",
+  "theme_color": "#f4f5f2",
+  "description": "Your personal wardrobe, stylist and trip-packing assistant.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
