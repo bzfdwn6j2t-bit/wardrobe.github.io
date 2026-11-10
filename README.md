@@ -31,3 +31,21 @@ For a public production app, add secure cloud storage/authentication, server-sid
 - Use **Export backup** in the Wardrobe tab to save a JSON backup to Files. Use **Restore backup** to restore it.
 - Trip planner can look up scheduled flight arrival details by flight number and flight date using Navo24's free beta schedule API. Coverage and free lookup limits apply; schedules may not be available for every airline/airport or dates beyond its published window. Always verify with the airline.
 - The app remains a free, local-first PWA hosted on GitHub Pages. There is no account sync.
+
+
+## Flight lookup robustness update
+- Flight number matching now requires an exact operating or codeshare number rather than silently selecting the first returned record.
+- Arrival parsing accepts documented `arrival_utc` timestamps and supported local-arrival fields, and uses the destination's IANA time zone when available.
+- Clearer messages distinguish missing coverage, rate limits, and missing arrival/time-zone data.
+- Flight results are scheduled timetable data, not live operational tracking; verify with the airline.
+
+
+## AI mannequin previews and trend-aware styling
+- Each generated outfit requests a single full-body mannequin preview from the public Pollinations image endpoint. Only text descriptions of the selected clothing are sent; user-uploaded clothing photos are not sent to the image service.
+- The preview is an AI approximation based on item names, colours and notes, not an exact try-on or faithful reproduction of the photographed garments. The public free endpoint is rate-limited and availability can change; if unavailable, the outfit itself still displays.
+- Discover includes links to current menswear trend coverage and a curated trend summary. The outfit selector lightly favours matching items already in the user's wardrobe (wide-leg/relaxed silhouettes, tailored outerwear, charcoal/chocolate/green tones, leather/denim and stripes). It does not scrape fashion websites live; the editorial trend references need periodic updating.
+- No image-generation API key or paid account is required for the prototype endpoint. It is a third-party service, not an OpenAI image-generation integration.
+
+
+## Version 5 — exact-photo outfit boards
+The Stylist now presents the selected wardrobe pieces using their original saved photos in a clean editorial outfit board. It no longer calls the third-party text-to-image service for outfit previews. This is fully free, keeps garment imagery faithful to the uploaded photos, and does not transmit those photos to an image-generation provider. It is a visual outfit board, not a photorealistic virtual try-on.

@@ -27,8 +27,28 @@ $("#exportBackup").onclick=()=>{let backup={app:"WARDROBE",version:2,exportedAt:
 $("#importBackup").onclick=()=>$("#backupFile").click();
 $("#backupFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;try{let b=JSON.parse(await f.text());if(!Array.isArray(b.items))throw Error("This doesn't look like a WARDROBE backup");if(!confirm(`Restore ${b.items.length} clothing items? This replaces the current wardrobe on this iPhone.`))return;items=b.items;await persistItems();localStorage.setItem("wardrobe.saved",JSON.stringify(b.saved||[]));localStorage.setItem("wardrobe.inspo",JSON.stringify(b.inspiration||[]));if(b.location)localStorage.setItem("wardrobe.location",b.location);render();toast("WARDROBE backup restored")}catch(err){toast(err.message||"Could not read that backup")}finally{e.target.value=""}};
 const label={Tops:"Top",Bottoms:"Bottoms",Layers:"Layer",Shoes:"Shoes",Accessories:"Finishing touch"};
-function choose(event,temp,cond,style){let by=c=>items.filter(x=>x.category===c),pick=a=>a.sort(()=>Math.random()-.5);let top=pick(by("Tops"))[0],bottom=pick(by("Bottoms"))[0],layer=pick(by("Layers")),shoe=pick(by("Shoes"))[0],acc=pick(by("Accessories"))[0],out=[top,bottom].filter(Boolean);if(temp<17&&layer.length)out.push(layer.sort((a,b)=>b.warmth-a.warmth)[0]);if((cond==="rain"||cond==="wind")&&layer.length){let rain=layer.find(x=>/coat|rain|waterproof|jacket|shell/i.test(x.name+" "+x.notes));if(rain&&!out.includes(rain))out.push(rain)}if(shoe)out.push(shoe);if(acc&&Math.random()>.5)out.push(acc);if(style==="smart"||["Work","Dinner","Date night","Evening out"].includes(event))out.sort((a,b)=>({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[a.style]??2)-({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[b.style]??2));return out}
-$("#generate").onclick=()=>{if(!items.length){toast("Add clothes first");go("wardrobe");return}let event=$("#event").value,temp=+$("#temp").value,cond=$("#condition").value,out=choose(event,temp,cond,$("#style").value);$("#outfit").classList.remove("hidden");$("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware layers":cond==="cold"?"Warm layers":cond==="hot"?"Lightweight pieces":"Balanced for the conditions"}</p>${out.map(x=>`<div class="outfit-piece"><div class="thumb">${x.photo?`<img src="${x.photo}">`:"◇"}</div><div><small>${label[x.category]}</small><b>${esc(x.name)}</b><small>${esc(x.colour||x.style)}</small></div></div>`).join("")}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;$("#again").onclick=()=>$("#generate").click();$("#saveLook").onclick=()=>{let saved=JSON.parse(localStorage.getItem("wardrobe.saved")||"[]");saved.unshift({event,ids:out.map(x=>x.id),date:new Date().toISOString()});localStorage.setItem("wardrobe.saved",JSON.stringify(saved));toast("Look saved")}};
+const TREND_CUES=[
+  {name:"wide-leg proportions",re:/wide.?leg|relaxed fit|loose fit|pleated/i,weight:1.8},
+  {name:"tailored layers",re:/blazer|overcoat|trench|tailored jacket/i,weight:1.6},
+  {name:"rich chocolate and charcoal tones",re:/chocolate|brown|charcoal|espresso|pine green|forest green/i,weight:1.3},
+  {name:"textured leather",re:/leather|suede/i,weight:1.2},
+  {name:"classic denim",re:/denim|jeans/i,weight:0.8},
+  {name:"stripes and pattern",re:/stripe|striped|check/i,weight:0.7}
+];
+function trendScore(x){let t=`${x.name} ${x.colour||""} ${x.notes||""}`;return TREND_CUES.reduce((n,c)=>n+(c.re.test(t)?c.weight:0),0)}
+function pickTrendAware(list){if(!list.length)return null;let ranked=[...list].sort((a,b)=>trendScore(b)-trendScore(a));let pool=ranked.slice(0,Math.min(3,ranked.length));return pool[Math.floor(Math.random()*pool.length)]}
+function trendNotes(out){let found=[];for(const x of out){let t=`${x.name} ${x.colour||""} ${x.notes||""}`;for(const cue of TREND_CUES)if(cue.re.test(t)&&!found.includes(cue.name))found.push(cue.name)}return found.slice(0,2)}
+function choose(event,temp,cond,style){let by=c=>items.filter(x=>x.category===c),pick=pickTrendAware;let top=pick(by("Tops")),bottom=pick(by("Bottoms")),layer=by("Layers"),shoe=pick(by("Shoes")),acc=pick(by("Accessories")),out=[top,bottom].filter(Boolean);if(temp<17&&layer.length)out.push(pick(layer.sort((a,b)=>b.warmth-a.warmth).slice(0,3)));if((cond==="rain"||cond==="wind")&&layer.length){let rain=layer.find(x=>/coat|rain|waterproof|jacket|shell/i.test(x.name+" "+x.notes));if(rain&&!out.includes(rain))out.push(rain)}if(shoe)out.push(shoe);if(acc&&Math.random()>.5)out.push(acc);if(style==="smart"||["Work","Dinner","Date night","Evening out"].includes(event))out.sort((a,b)=>({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[a.style]??2)-({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[b.style]??2));return out}
+$("#generate").onclick=()=>{
+ if(!items.length){toast("Add clothes first");go("wardrobe");return}
+ let event=$("#event").value,temp=+$("#temp").value,cond=$("#condition").value,out=choose(event,temp,cond,$("#style").value);
+ let cues=trendNotes(out);
+ const boardItems=out.map(x=>`<div class="photo-look-item"><div class="photo-look-image">${x.photo?`<img src="${x.photo}" alt="${esc(x.name)}">`:`<span>◇</span>`}</div><div class="photo-look-label"><small>${label[x.category]}</small><b>${esc(x.name)}</b><small>${esc(x.colour||x.style)}</small></div></div>`).join("");
+ $("#outfit").classList.remove("hidden");
+ $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware layers":cond==="cold"?"Warm layers":cond==="hot"?"Lightweight pieces":"Balanced for the conditions"}</p><div class="photo-look-board"><div class="photo-look-heading"><div class="eyebrow">BUILT FROM YOUR ACTUAL PHOTOS</div><span>WARDROBE EDIT</span></div><div class="photo-look-grid">${boardItems}</div><p class="fine">Every image above is the original photo saved in your wardrobe. No AI redraw, invented garment details or external image service.</p></div>${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
+ $("#again").onclick=()=>$("#generate").click();
+ $("#saveLook").onclick=()=>{let saved=JSON.parse(localStorage.getItem("wardrobe.saved")||"[]");saved.unshift({event,ids:out.map(x=>x.id),date:new Date().toISOString(),photoBoard:true});localStorage.setItem("wardrobe.saved",JSON.stringify(saved));toast("Look saved")};
+};
 $$(".occasions button").forEach(b=>b.onclick=()=>{go("stylist");$("#event").value=b.dataset.event});
 const looks=[["Quiet confidence","Minimal","Tonal layers, clean lines and understated texture.","#283c35","#c9c2b1","#7c8a7c"],["The modern classic","Smart casual","A relaxed jacket, crisp base layer and tailored trouser.","#9a8068","#e6e0d3","#343d38"],["Off-duty uniform","Weekend","Comfortable proportions with one considered detail.","#536b60","#d4d0c3","#8b8b78"],["Soft structure","Minimal","Neutral shades with shape and subtle contrast.","#b4aa99","#eee9df","#5e655d"],["Dinner, sorted","Smart casual","Dark foundations, tactile fabric and a sharper shoe.","#242d2b","#a88b6e","#e2ded3"],["Weekend layers","Weekend","Easy knitwear and practical outerwear.","#7b806e","#b5a48d","#303c35"]];
 function inspo(v="All"){let a=looks.filter(x=>v==="All"||x[1]===v);$("#inspo").innerHTML=a.map(x=>`<article class="inspo"><div class="inspo-art" style="--a:${x[3]};--b:${x[4]};--c:${x[5]}"><span>${x[1].toUpperCase()}</span></div><div class="inspo-copy"><b>${x[0]}</b><p>${x[2]}</p><button class="save" data-save="${looks.indexOf(x)}">♡ Save inspiration</button></div></article>`).join("");$$("[data-save]").forEach(b=>b.onclick=()=>{let s=JSON.parse(localStorage.getItem("wardrobe.inspo")||"[]");s.push(looks[+b.dataset.save]);localStorage.setItem("wardrobe.inspo",JSON.stringify(s));toast("Inspiration saved")})}
@@ -37,8 +57,69 @@ $("#start").value=new Date().toISOString().slice(0,10);$("#end").value=new Date(
 $("#start").onchange=()=>{lastFlight=null;$("#arrivalDate").value=$("#start").value;$("#flightStatus").textContent="Flight date changed. Look up the flight again or enter the arrival details manually."};
 $("#flightNumber").oninput=()=>{lastFlight=null;$("#flightStatus").textContent="Enter the flight number and date, then look up the scheduled landing time."};
 function getDateInZone(iso,tz){let d=new Date(iso),parts=new Intl.DateTimeFormat("en-GB",{timeZone:tz||"UTC",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(d),v={};parts.forEach(p=>v[p.type]=p.value);return {date:`${v.year}-${v.month}-${v.day}`,time:`${v.hour}:${v.minute}`}}
-function formatArrival(f){let iso=f.arrival_utc||f.arrivalUtc||f.arrival?.utc||f.arrival?.scheduled_utc;if(iso){let tz=f.destination?.tz||f.destination?.timezone||"UTC";return getDateInZone(iso,tz)}let val=f.arrival_time||f.arrivalTime||f.scheduled_arrival;if(val){let d=new Date(val);if(!isNaN(d))return getDateInZone(d.toISOString(),f.destination?.tz||"UTC")}return null}
-$("#lookupFlight").onclick=async()=>{let no=$("#flightNumber").value.trim().toUpperCase().replace(/\s+/g,""),date=$("#start").value;if(!no||!date){toast("Enter a flight number and flight date");return}$("#flightStatus").textContent="Looking up scheduled flight…";$("#lookupFlight").disabled=true;try{let url=`https://flight.navo24.com/api/v1/flights/${encodeURIComponent(no)}?date=${encodeURIComponent(date)}`,r=await fetch(url,{headers:{Accept:"application/json"}});if(!r.ok)throw Error(r.status===429?"Free flight lookup limit reached for now. Enter the arrival time manually.":r.status===404?"Flight not found in the free schedule database. Enter arrival details manually.":"Flight lookup unavailable. Enter arrival details manually.");let payload=await r.json(),flights=Array.isArray(payload.data)?payload.data:(payload.data?[payload.data]:Array.isArray(payload.flights)?payload.flights:[]);let flight=flights.find(f=>(String(f.flight_no||"").toUpperCase()===no)||(f.codeshares||[]).some(c=>String(typeof c==="string"?c:c.flight_no||c.flightNo||"").toUpperCase()===no))||flights[0];if(!flight)throw Error("No matching scheduled flight found. Enter arrival details manually.");let arrival=formatArrival(flight);if(!arrival)throw Error("Flight found, but no arrival time was supplied. Enter it manually.");lastFlight=flight;$("#arrivalDate").value=arrival.date;$("#arrivalTime").value=arrival.time;if(flight.destination?.city){$("#destination").value=flight.destination.city+(flight.destination.iata?` (${flight.destination.iata})`:"")}$("#flightStatus").textContent=`Scheduled arrival found: ${arrival.date} at ${arrival.time} local time${flight.destination?.name?" · "+flight.destination.name:""}. Data last refreshed ${flight.updated_at?new Date(flight.updated_at).toLocaleString():"time not supplied"}.`;toast("Flight arrival added")}catch(err){$("#flightStatus").textContent=err.message;toast("Flight lookup needs manual confirmation")}finally{$("#lookupFlight").disabled=false}};
+function normaliseFlightPayload(payload){
+  const candidates=[];
+  const add=v=>{if(Array.isArray(v))candidates.push(...v);else if(v&&typeof v==="object"){if(Array.isArray(v.flights))candidates.push(...v.flights);else if(Array.isArray(v.results))candidates.push(...v.results);else if(v.flight_no||v.flightNo||v.arrival_utc||v.arrivalUtc)candidates.push(v)}};
+  add(payload?.data);add(payload?.flights);add(payload?.results);add(payload);
+  return candidates;
+}
+function flightMatches(f,no){
+  const clean=v=>String(v||"").toUpperCase().replace(/[\s-]/g,"");
+  return clean(f.flight_no||f.flightNo)===no || (Array.isArray(f.codeshares)&&f.codeshares.some(c=>clean(typeof c==="string"?c:(c.flight_no||c.flightNo||c.code))===no));
+}
+function formatArrival(f){
+  const dest=f.destination||f.to||f.arrival?.airport||{};
+  const tz=dest.tz||dest.timezone||f.destination_tz||f.arrival_timezone||((f.board==="arr"||f.station===dest.iata)?f.tz:null);
+  const iso=f.arrival_utc||f.arrivalUtc||f.scheduled_arrival_utc||f.arrival?.utc||f.arrival?.scheduled_utc||f.times?.arrival_utc;
+  if(iso){
+    const instant=typeof iso==="number"?new Date(iso>1e12?iso:iso*1000):new Date(iso);
+    if(!Number.isNaN(instant.getTime()))return getDateInZone(instant.toISOString(),tz||"UTC");
+  }
+  const local=f.arrival_time_local||f.arrival_local||f.arrival?.time_local||((f.board==="arr"||f.station===dest.iata)?f.time_local:null);
+  const localDate=f.arrival_date_local||f.arrival?.date_local||((f.board==="arr"||f.station===dest.iata)?f.date:null);
+  if(local&&/^\d{1,2}:\d{2}/.test(String(local))&&localDate){
+    return {date:String(localDate).slice(0,10),time:String(local).slice(0,5),timezone:tz||"destination local time"};
+  }
+  const val=f.arrival_time||f.arrivalTime||f.scheduled_arrival;
+  if(val){const d=new Date(val);if(!Number.isNaN(d.getTime()))return getDateInZone(d.toISOString(),tz||"UTC")}
+  return null;
+}
+$("#lookupFlight").onclick=async()=>{
+  const no=$("#flightNumber").value.trim().toUpperCase().replace(/[\s-]/g,""),date=$("#start").value;
+  if(!no||!date){toast("Enter a flight number and flight date");return}
+  $("#flightStatus").textContent="Looking up the scheduled flight…";
+  $("#lookupFlight").disabled=true;
+  lastFlight=null;
+  try{
+    // Navo24's documented public beta endpoint returns scheduled legs, including arrival_utc and the destination IANA time zone.
+    const url=`https://flight.navo24.com/api/v1/flights/${encodeURIComponent(no)}?date=${encodeURIComponent(date)}`;
+    const r=await fetch(url,{headers:{Accept:"application/json"}});
+    let payload={};try{payload=await r.json()}catch(e){}
+    if(!r.ok){
+      const apiMessage=payload?.error?.message||payload?.message;
+      if(r.status===429)throw Error("The free flight lookup limit has been reached. Try again later or enter the arrival manually.");
+      if(r.status===404)throw Error("This flight/date isn't in the schedule database. Check the flight date or enter the arrival manually.");
+      throw Error(apiMessage||`Flight lookup returned error ${r.status}. You can enter the arrival details manually.`);
+    }
+    const flights=normaliseFlightPayload(payload);
+    const flight=flights.find(f=>flightMatches(f,no));
+    if(!flight)throw Error("The schedule service didn't return this flight number. It may not cover this airline or date; enter the arrival manually.");
+    const arrival=formatArrival(flight);
+    if(!arrival)throw Error("The flight was found, but the service didn't provide a usable arrival timestamp or destination time zone. Enter the arrival manually.");
+    lastFlight=flight;
+    $("#arrivalDate").value=arrival.date;
+    $("#arrivalTime").value=arrival.time;
+    const dest=flight.destination||flight.to||{};
+    const destName=dest.city||dest.name||dest.iata||"destination";
+    if(dest.city||dest.name)$("#destination").value=dest.city||dest.name;
+    const refreshed=flight.updated_at?` Schedule data refreshed ${new Date(flight.updated_at).toLocaleString()}.`:"";
+    $("#flightStatus").textContent=`Scheduled arrival: ${arrival.date} at ${arrival.time} local time in ${destName}.${refreshed} Please verify with your airline; this is a timetable, not live tracking.`;
+    toast("Scheduled local arrival added");
+  }catch(err){
+    $("#flightStatus").textContent=err.message||"Flight lookup failed. Enter arrival details manually.";
+    toast("Flight lookup unavailable");
+  }finally{$("#lookupFlight").disabled=false}
+};
 function tripItems(outfits,climate,acts){let get=c=>items.filter(x=>x.category===c).sort((a,b)=>$("#light").checked?b.warmth-a.warmth:a.warmth-b.warmth);let tops=Math.max(1,Math.ceil(outfits*.7)),bottoms=Math.max(1,Math.ceil(outfits*.5));return [...get("Tops").slice(0,Math.min(outfits,tops)),...get("Bottoms").slice(0,Math.min(outfits,bottoms)),...get("Layers").slice(0,climate==="hot"?1:climate==="cold"?3:2),...get("Shoes").slice(0,acts.includes("Exploring")?2:1),...get("Accessories").slice(0,2)]}
 function dateDiff(a,b){return Math.max(0,Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000))}
 $("#plan").onclick=async()=>{let dest=$("#destination").value.trim(),start=$("#start").value,end=$("#end").value,arrivalDate=$("#arrivalDate").value||start,arrivalTime=$("#arrivalTime").value;if(!dest||!start||!end){toast("Add destination and flight dates");return}if(end<arrivalDate){toast("Return date must be on or after your arrival date");return}let span=dateDiff(arrivalDate,end),lateArrival=arrivalTime&&arrivalTime>="17:00",outfits=Math.max(1,span+(lateArrival?0:1)),acts=$$("#activities input:checked").map(x=>x.value),climate=$("#climate").value,weather="Weather estimate unavailable";if(span>21){toast("Prototype supports trips up to 21 days");return}if(climate==="auto"){try{let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(dest)}&count=1&language=en&format=json`).then(r=>r.json());if(g.results?.length){let p=g.results[0],f=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&daily=temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=auto`).then(r=>r.json());weather=`Forecast: ${Math.min(...f.daily.temperature_2m_min)}–${Math.max(...f.daily.temperature_2m_max)}°C`}}catch(e){weather="Live forecast unavailable; check conditions before packing"}}else weather=({hot:"Hot / humid selected",mild:"Mild conditions selected",cold:"Cold conditions selected",wet:"Wet / rainy selected"})[climate];let pack=tripItems(outfits,climate,acts),daysList=Array.from({length:span+1},(_,i)=>{let d=new Date(new Date(arrivalDate+"T12:00:00").getTime()+i*86400000);return d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})}),topItems=pack.filter(x=>x.category==="Tops"),bottomItems=pack.filter(x=>x.category==="Bottoms"),shoe=pack.find(x=>x.category==="Shoes");$("#tripResult").classList.remove("hidden");$("#tripResult").innerHTML=`<div class="eyebrow">YOUR TRAVEL EDIT</div><h2>${esc(dest)}</h2><p class="muted">${span+1} calendar day${span===0?"":"s"} at destination · ${outfits} outfit${outfits===1?"":"s"} estimated · ${weather}</p><div class="flight-summary"><b>FLIGHT ARRIVAL</b><strong>${arrivalDate}${arrivalTime?" · "+arrivalTime:" · time not confirmed"}</strong><small>${lastFlight?esc(lastFlight.flight_no||$("#flightNumber").value):"Manually entered / estimated"} · local destination time</small></div><h3>Daily outfit schedule</h3>${daysList.map((d,i)=>{let type=i===0?(lateArrival?"Late arrival · no separate daytime outfit":"Arrival day · daytime outfit"):i===span?"Departure day · travel outfit":"Full day · daytime outfit";let pieces=[topItems.length?topItems[i%topItems.length]:null,bottomItems.length?bottomItems[i%bottomItems.length]:null,shoe].filter(Boolean).map(x=>esc(x.name)).join(" · ");return `<div class="pack-day"><h4>${d}</h4><p>${type}</p><p>${pieces||"Add more wardrobe pieces to build complete looks."}</p></div>`}).join("")}<h3>Packing checklist · ${pack.length} pieces</h3><div class="pack-list">${pack.map(x=>`<label><input type="checkbox"> ${esc(x.name)}</label>`).join("")}</div>${!pack.length?"<p class='muted'>Add wardrobe pieces to create a packing list.</p>":""}<p class="fine">Outfit count assumes one daytime outfit on arrival if you land before 17:00, one for each full day, and a travel outfit on departure. You can adjust this estimate for your plans.</p>`};
