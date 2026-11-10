@@ -24,3 +24,10 @@ Then visit `http://localhost:8000`.
 4. Enable “Open as Web App” if shown, then tap Add.
 
 For a public production app, add secure cloud storage/authentication, server-side AI image tagging and styling, a real inspiration image/content source with licensing, and privacy/backup controls before inviting other users.
+
+
+## Updated storage and trip planning
+- Clothing records and photos now use IndexedDB on the iPhone, with migration from the original localStorage collection.
+- Use **Export backup** in the Wardrobe tab to save a JSON backup to Files. Use **Restore backup** to restore it.
+- Trip planner can look up scheduled flight arrival details by flight number and flight date using Navo24's free beta schedule API. Coverage and free lookup limits apply; schedules may not be available for every airline/airport or dates beyond its published window. Always verify with the airline.
+- The app remains a free, local-first PWA hosted on GitHub Pages. There is no account sync.
