@@ -59,13 +59,31 @@
 <section class="page" id="trips">
 <div class="eyebrow">PACK WITH INTENTION</div><h1>Trip planner<span>.</span></h1><p class="muted">Build a compact travel wardrobe around the destination, forecast and plans.</p>
 <div class="panel">
+<label>Trip type<select id="tripType"><option value="work">Work trip</option><option value="holiday">Holiday</option><option value="mixed">Work + holiday</option></select></label>
 <label>Where are you going?<input id="destination" placeholder="e.g. Singapore, Cape Town, New York"></label>
 <div class="two"><label>Flight date<input id="start" type="date"></label><label>Return date<input id="end" type="date"></label></div>
 <label>Flight number into your destination<input id="flightNumber" placeholder="e.g. VS123" autocapitalize="characters" autocomplete="off"></label>
 <button class="secondary wide" type="button" id="lookupFlight">Look up flight arrival ↗</button>
 <p class="fine" id="flightStatus">Enter the flight number and date to look up the scheduled landing time. If the free schedule source cannot find it, you can enter the arrival details below.</p>
 <div class="two"><label>Arrival date (local)<input id="arrivalDate" type="date"></label><label>Landing time (local)<input id="arrivalTime" type="time"></label></div>
-<label>What will you be doing?</label><div class="chips" id="activities"><label><input type="checkbox" value="Work" checked><span>Work</span></label><label><input type="checkbox" value="Restaurants"><span>Restaurants</span></label><label><input type="checkbox" value="Exploring"><span>Exploring</span></label><label><input type="checkbox" value="Evenings out"><span>Evenings out</span></label><label><input type="checkbox" value="Exercise"><span>Exercise</span></label><label><input type="checkbox" value="Relaxing"><span>Relaxing</span></label></div>
+<div class="trip-divider"></div>
+<div class="trip-heading"><div class="eyebrow">WORK &amp; UNIFORM</div><p class="fine">This stays relevant on a holiday too: simply choose “No” if you will not be working.</p></div>
+<label>Will you be working?<select id="willWork"><option value="yes">Yes</option><option value="no">No</option></select></label>
+<div id="workDetails">
+  <div class="two"><label>Working days<input id="workDays" type="number" min="1" max="31" value="1"></label><label>Laundry available?<select id="laundry"><option value="yes">Yes</option><option value="no">No</option></select></label></div>
+  <div id="uniformDetails"><label>Uniform shirts to pack<input id="uniformShirts" type="number" min="0" max="31" placeholder="Auto: one per work day"></label><p class="fine" id="uniformHint">Without laundry, WARDROBE suggests one uniform shirt per working day. You can override this number.</p></div>
+</div>
+<div class="trip-divider"></div>
+<div class="trip-heading"><div class="eyebrow">PLANS &amp; MOVEMENT</div><p class="fine">Your notes below influence the outfit suggestions — mention plans such as a boat trip, wine tasting, meetings or a smart dinner.</p></div>
+<label>Itinerary / plan<textarea id="itinerary" rows="5" placeholder="Day 1 — boat trip in the evening&#10;Day 2 — wine tasting&#10;Day 3 — relaxed exploring"></textarea></label>
+<label>What else will you be doing?</label><div class="chips" id="activities"><label><input type="checkbox" value="Restaurants"><span>Restaurants</span></label><label><input type="checkbox" value="Exploring" checked><span>Exploring</span></label><label><input type="checkbox" value="Evenings out"><span>Evenings out</span></label><label><input type="checkbox" value="Water / boat"><span>Water / boat</span></label><label><input type="checkbox" value="Relaxing"><span>Relaxing</span></label></div>
+<div class="session-grid">
+  <label class="session-check"><input id="gym" type="checkbox"> <span>Will you go to the gym?</span></label><label>Gym sessions<input id="gymSessions" type="number" min="0" max="30" value="0" disabled></label>
+  <label class="session-check"><input id="running" type="checkbox"> <span>Will you run?</span></label><label>Running sessions<input id="runningSessions" type="number" min="0" max="30" value="0" disabled></label>
+</div>
+<div class="trip-divider"></div>
+<div class="trip-heading"><div class="eyebrow">ESSENTIALS CALCULATOR</div><p class="fine">The assumptions are deliberately editable: underwear = each calendar trip day + extras for each flight day and exercise session; socks = each calendar trip day + exercise-session extras.</p></div>
+<div class="three"><label>Extra underwear per flight day<input id="flightUnderwearExtra" type="number" min="0" max="5" value="1"></label><label>Extra underwear per exercise<input id="exerciseUnderwearExtra" type="number" min="0" max="5" value="1"></label><label>Extra socks per exercise<input id="exerciseSocksExtra" type="number" min="0" max="5" value="1"></label></div>
 <label>Weather expectation<select id="climate"><option value="auto">Look up destination forecast</option><option value="hot">Hot / humid</option><option value="mild">Mild</option><option value="cold">Cold</option><option value="wet">Wet / rainy</option></select></label>
 <label class="check"><input type="checkbox" id="light" checked> Prioritise versatile pieces and lighter packing</label>
 <button class="primary wide" id="plan">Build my packing plan ↗</button></div><div id="tripResult" class="panel hidden"></div><p class="fine">Flight schedule lookups use a free beta data source with limited coverage and request limits. Schedules are estimates, not live operational updates. Check your airline before travelling. Destination forecasts need an internet connection.</p>
@@ -74,12 +92,12 @@
 <nav><button class="active" data-go="home"><b>⌂</b><small>Home</small></button><button data-go="wardrobe"><b>▦</b><small>Wardrobe</small></button><button data-go="stylist"><b class="center">✳</b><small>Stylist</small></button><button data-go="discover"><b>◇</b><small>Discover</small></button><button data-go="trips"><b>↗</b><small>Trips</small></button></nav>
 </div>
 <dialog id="itemDialog"><form id="itemForm" class="dialog">
-<div class="dialog-head"><div class="eyebrow">ADD TO YOUR COLLECTION<h2>New wardrobe piece</h2></div><button type="button" class="plain close" data-close="itemDialog">×</button></div>
-<label class="photo"><span id="preview">＋</span><b>Add a photo</b><small>Individual item photos work best</small><input id="photo" type="file" accept="image/*" capture="environment"></label>
+<div class="dialog-head"><div class="eyebrow" id="itemDialogEyebrow">ADD TO YOUR COLLECTION<h2 id="itemDialogTitle">New wardrobe piece</h2></div><button type="button" class="plain close" data-close="itemDialog">×</button></div>
+<label class="photo"><span id="preview">＋</span><b id="photoLabel">Add a photo</b><small>Individual item photos work best</small><input id="photo" type="file" accept="image/*" capture="environment"></label><button type="button" class="text-button hidden" id="clearPhoto">Remove current photo</button>
 <label>What is it called?<input id="name" required placeholder="e.g. Navy Oxford shirt"></label>
 <div class="two"><label>Category<select id="category"><option>Tops</option><option>Bottoms</option><option>Layers</option><option>Shoes</option><option>Accessories</option></select></label><label>Colour<input id="colour" placeholder="e.g. Navy"></label></div>
 <div class="two"><label>Style<select id="itemStyle"><option>Versatile</option><option>Casual</option><option>Smart casual</option><option>Formal</option><option>Sporty</option></select></label><label>Warmth<select id="warmth"><option value="1">Light</option><option value="2" selected>Midweight</option><option value="3">Warm</option></select></label></div>
-<label>Notes (optional)<input id="notes" placeholder="Fit, material, brand…"></label><button class="primary wide">Save to wardrobe</button></form></dialog>
+<label>Notes (optional)<input id="notes" placeholder="Fit, material, brand…"></label><label class="check"><input id="uniform" type="checkbox"> This is a uniform / work shirt</label><button class="primary wide" id="itemSave">Save to wardrobe</button></form></dialog>
 <dialog id="weatherDialog"><form class="dialog" id="weatherForm"><div class="dialog-head"><div class="eyebrow">LOCAL CONDITIONS<h2>Set your weather</h2></div><button type="button" class="plain close" data-close="weatherDialog">×</button></div><label>Town or city<input id="location" placeholder="e.g. Preston"></label><button class="primary wide">Get weather</button></form></dialog>
 <dialog id="detailDialog"><div class="dialog" id="detail"></div></dialog><div id="toast"></div>
 <script src="app.js"></script></body></html>
