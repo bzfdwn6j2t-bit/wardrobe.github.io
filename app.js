@@ -133,27 +133,72 @@ function paletteScore(top,bottom){
  if(a==="accent"&&b==="accent")score-=4;
  return {score,reason};
 }
-function pairCompatibility(top,bottom,event,activity,style){
+function inferDressCode(event,activity,style){
+ const t=`${event||""} ${activity||""}`.toLowerCase();
+ const formal=[
+  [/\b(black tie|white tie|gala|awards ceremony|formal wedding|wedding guest|wedding reception|cocktail attire|business formal|suit and tie|court|ceremony|graduation ceremony)\b/,5],
+  [/\b(formal|dress code: formal|evening dress|tuxedo|dinner jacket)\b/,4],
+  [/\b(board meeting|client presentation|interview|important meeting|corporate event)\b/,2]
+ ];
+ const smart=[
+  [/\b(smart casual|business casual|wine tasting|nice restaurant|fine dining|date night|dinner date|cocktails|evening out|theatre|show|birthday dinner|restaurant|brunch)\b/,3],
+  [/\b(dinner|date|work|office|meeting|pub meal)\b/,1]
+ ];
+ const casual=[
+  [/\b(pub|pub with friends|mates|friends|beer|drinks with friends|casual drinks|bar|laid.?back|relaxed|everyday|day.?to.?day|coffee|walk|park|sightseeing|travel|airport|weekend|shopping| BBQ|barbecue|game night)\b/,3],
+  [/\b(casual|informal|off.?duty|low.?key)\b/,2],
+  [/\b(gym|run|running|hike|workout|sport)\b/,4]
+ ];
+ const score=list=>list.reduce((n,[re,w])=>n+(re.test(t)?w:0),0);
+ let f=score(formal),s=score(smart),c=score(casual);
+ if(/\b(gym|run|running|hike|workout|sport)\b/.test(t))return "casual";
+ if(f>=4&&f>=s&&f>=c)return "formal";
+ if(/\b(smart casual|business casual)\b/.test(t))return "smart casual";
+ if(/\b(casual|informal|laid.?back|relaxed|off.?duty)\b/.test(t)&&f<4)return "casual";
+ if(/\b(pub|pub with friends|mates|friends|beer|drinks with friends|casual drinks|bar|laid.?back|relaxed|everyday|coffee|walk|weekend|shopping)\b/.test(t)&&f<4)return "casual";
+ if(s>c||(/\b(dinner|date|restaurant|work|office|meeting|cocktails|theatre)\b/.test(t)&&c===0))return "smart casual";
+ if(c>0)return "casual";
+ if(f>0)return "formal";
+ // Style direction can refine an otherwise ambiguous prompt, but never overrides a clear occasion.
+ if(style==="smart")return "smart casual";
+ if(style==="relaxed")return "casual";
+ return "casual";
+}
+function pairCompatibility(top,bottom,event,activity,style,dressCode){
  const palette=paletteScore(top,bottom);
  let score=palette.score;
  const f1=garmentFormality(top),f2=garmentFormality(bottom);
- score-=Math.abs(f1-f2)*1.25;
+ score-=Math.abs(f1-f2)*.8;
  const t=`${event} ${activity}`.toLowerCase();
- const formal=isFormalActivity(event,activity,style);
- if(formal){score+=(f1>=3?2:-3)+(f2>=3?2:-3)}
- else if(/wine tasting|smart casual|restaurant|dinner|date|evening out|brunch/.test(t)){
-   score+=(f1>=2&&f1<=3?1.5:-.5)+(f2>=2&&f2<=3?1.5:-.5);
-   if(/tuxedo|dinner jacket|suit trouser/.test(`${top.name} ${bottom.name}`.toLowerCase()))score-=3;
- }else if(/gym|run|running|hike|workout|sport/.test(t)){
-   score+=(f1===1?2:-2)+(f2===1?2:-2);
+ const topText=`${top.name} ${top.notes||""} ${top.style||""}`.toLowerCase();
+ const bottomText=`${bottom.name} ${bottom.notes||""} ${bottom.style||""}`.toLowerCase();
+ const tee=/\b(t.?shirt|tee|graphic tee|pocket tee)\b/.test(topText);
+ const casualTop=/\b(tee|t.?shirt|sweatshirt|hoodie|casual knit|crew.?neck|jumper|sweater|polo|overshirt|flannel|camp.?collar|cuban shirt)\b/.test(topText);
+ const dressShirt=/\b(oxford shirt|dress shirt|formal shirt|business shirt|smart shirt)\b/.test(topText)||(/\bshirt\b/.test(topText)&&f1>=3);
+ const casualBottom=/\b(jeans?|denim|casual trouser|cargo|shorts|chinos?)\b/.test(bottomText);
+ if(dressCode==="formal"){
+  score+=(f1>=3?4:-5)+(f2>=3?4:-5);
+  if(dressShirt)score+=1.5;
+ }else if(dressCode==="smart casual"){
+  score+=(f1>=2&&f1<=3?3:-2)+(f2>=2&&f2<=3?3:-2);
+  if(dressShirt)score+=.8;
+  if(/tuxedo|dinner jacket|suit trouser/.test(`${top.name} ${bottom.name}`.toLowerCase()))score-=4;
+ }else{
+  score+=(f1<=2?3.5:-3.5)+(f2<=2?2.5:-2.5);
+  score+=(casualTop?2:0)+(tee?1:0)+(casualBottom?1.5:0);
+  if(dressShirt)score-=3.5;
  }
- score+=Math.min(1.5,trendScore(top)*.25+trendScore(bottom)*.25);
+ if(/gym|run|running|hike|workout|sport/.test(t))score+=(f1===1?3:-3)+(f2===1?3:-3);
+ // A requested style is a gentle nudge, not a substitute for interpreting the occasion.
+ if(style==="smart"&&dressCode!=="casual")score+=(f1>=2?0.7:0)+(f2>=2?0.7:0);
+ if(style==="relaxed"&&dressCode!=="formal")score+=(f1<=2?1:0)+(f2<=2?1:0);
+ score+=Math.min(1.2,trendScore(top)*.2+trendScore(bottom)*.2);
  return {...palette,score};
 }
-function chooseBestPair(tops,bottoms,event,activity,style){
+function chooseBestPair(tops,bottoms,event,activity,style,dressCode){
  const pairs=[];
  for(const top of tops)for(const bottom of bottoms){
-   const c=pairCompatibility(top,bottom,event,activity,style);
+   const c=pairCompatibility(top,bottom,event,activity,style,dressCode);
    pairs.push({top,bottom,...c});
  }
  pairs.sort((a,b)=>b.score-a.score);
@@ -179,9 +224,10 @@ function layerScore(x,formal,cold,weather){
  return score;
 }
 function choose(event,temp,cond,style,activity=""){
+ const dressCode=inferDressCode(event,activity,style);
  let by=c=>items.filter(x=>x.category===c),layers=by("Layers"),tops=by("Tops"),bottoms=by("Bottoms");
- const pair=chooseBestPair(tops,bottoms,event,activity,style);
- let out=[pair.top,pair.bottom].filter(Boolean),formal=isFormalActivity(event,activity,style),cold=temp<=12;
+ const pair=chooseBestPair(tops,bottoms,event,activity,style,dressCode);
+ let out=[pair.top,pair.bottom].filter(Boolean),formal=dressCode==="formal",cold=temp<=12;
  let reasons=[pair.reason];
  // Choose footwear compatible with both the dress code and palette, not at random.
  const shoes=by("Shoes");
@@ -193,7 +239,8 @@ function choose(event,temp,cond,style,activity=""){
        if(["brown","earth","warm-neutral","black"].includes(c))s+=1;
        if(c==="light-neutral"&&bottom!=="light-neutral")s+=.8;
        if(formal&&garmentFormality(x)>=3)s+=3;
-       if(!formal&&garmentFormality(x)<=2)s+=1;
+       if(dressCode==="casual"&&garmentFormality(x)<=2)s+=2;
+       if(dressCode==="smart casual"&&garmentFormality(x)>=2&&garmentFormality(x)<=3)s+=1.5;
        return s+trendScore(x)*.1;
      };return shoeScore(b)-shoeScore(a);
    });
@@ -207,13 +254,12 @@ function choose(event,temp,cond,style,activity=""){
    let chosen=candidates[0];
    if(chosen&&(!isBlazer(chosen)||formal||cold)){out.push(chosen);reasons.push(`A ${chosen.name} is included for ${formal?"the formal setting":cold?"the colder temperature":cond==="rain"?"rain protection":cond==="wind"?"wind protection":"the outdoor activity"}.`)}
  }
- const smartCasual=/smart casual|wine tasting|brunch|casual dinner|pub|restaurant/i.test(`${event} ${activity}`);
- if(smartCasual&&!formal)out=out.filter(x=>!isBlazer(x));
+ if(dressCode!=="formal")out=out.filter(x=>!isBlazer(x));
  const accessories=by("Accessories");
  if(accessories.length&&Math.random()>.7)out.push(pickTrendAware(accessories));
  if(style==="smart"||formal||["Work","Date night"].includes(event))
    out.sort((a,b)=>({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[a.style]??2)-({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[b.style]??2));
- lastOutfitReason=reasons.filter(Boolean).join(" ");
+ lastOutfitReason=`Inferred dress code: ${dressCode}. `+reasons.filter(Boolean).join(" ");
  return out;
 }
 
@@ -231,9 +277,9 @@ $("#saveAiConfig").onclick=()=>{
  localStorage.setItem(AI_CONFIG_KEY,JSON.stringify({url,token}));
  refreshAIConfig();toast("AI connection saved on this iPhone");
 };
-function makeMannequinPrompt(out,event,temp,cond,activity=""){
+function makeMannequinPrompt(out,event,temp,cond,activity="",dressCode="casual"){
  const garments=out.map(x=>`${label[x.category]}: ${x.name}${x.colour?`, ${x.colour}`:""}${x.style?`, ${x.style}`:""}${x.notes?`, ${x.notes}`:""}`).join("; ");
- return `Create a premium photorealistic menswear fashion editorial image. Show ONE full-length, adult male mannequin with a smooth featureless matte ivory head, standing naturally, front three-quarter view, entire figure visible from head to shoes. Dress it in this exact outfit: ${garments}. Occasion: ${event}. Activity and setting: ${activity||"general everyday wear"}. Weather: ${temp}°C, ${cond}. Respect the intended dress code and setting. Do not add a blazer or formal tailoring unless the selected garments include it and the occasion is genuinely formal or cold-weather layering is appropriate. Reproduce the described garments, colours, silhouettes and layering as closely as possible. Clean warm-grey studio background, soft editorial lighting, realistic fabric drape, understated contemporary British menswear, natural proportions. No text, no watermark, no extra garments, no collage, no cropped feet.`;
+ return `Create a premium photorealistic menswear fashion editorial image. Show ONE full-length, adult male mannequin with a smooth featureless matte ivory head, standing naturally, front three-quarter view, entire figure visible from head to shoes. Dress it in this exact outfit: ${garments}. Occasion: ${event}. Activity and setting: ${activity||"general everyday wear"}. Weather: ${temp}°C, ${cond}. Inferred dress code: ${dressCode}. Match this level of formality throughout the outfit. Do not add a blazer or formal tailoring unless the selected garments include it and the occasion is genuinely formal or cold-weather layering is appropriate. Reproduce the described garments, colours, silhouettes and layering as closely as possible. Clean warm-grey studio background, soft editorial lighting, realistic fabric drape, understated contemporary British menswear, natural proportions. No text, no watermark, no extra garments, no collage, no cropped feet.`;
 }
 async function generateAIMannequin(prompt){
  const cfg=readAIConfig();
@@ -248,11 +294,11 @@ refreshAIConfig();
 
 $("#generate").onclick=async()=>{
  if(!items.length){toast("Add clothes first");go("wardrobe");return}
- let event=$("#event").value,temp=+$("#temp").value,cond=$("#condition").value,activity=$("#activity").value.trim(),out=choose(event,temp,cond,$("#style").value,activity);
- let cues=trendNotes(out),prompt=makeMannequinPrompt(out,event,temp,cond,activity);
+ let event=$("#event").value,temp=+$("#temp").value,cond=$("#condition").value,activity=$("#activity").value.trim(),style=$("#style").value,dressCode=inferDressCode(event,activity,style),out=choose(event,temp,cond,style,activity);
+ let cues=trendNotes(out),prompt=makeMannequinPrompt(out,event,temp,cond,activity,dressCode);
  const pieces=out.map(x=>`<div class="outfit-piece"><div class="thumb">${x.photo?`<img src="${x.photo}" alt="${esc(x.name)}">`:"◇"}</div><div><small>${label[x.category]}</small><b>${esc(x.name)}</b><small>${esc(x.colour||x.style)}</small></div></div>`).join("");
  $("#outfit").classList.remove("hidden");
- $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="fine">${esc(lastOutfitReason)}</p><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware":cond==="cold"?"Cold-weather":cond==="hot"?"Warm-weather":"Weather-balanced"} · ${activity?esc(activity):"Everyday styling"}</p><div class="ai-preview"><div class="eyebrow">AI MANNEQUIN PREVIEW</div><div class="ai-preview-status" id="aiPreviewStatus">Preparing your outfit illustration…</div><img id="aiMannequinImage" alt="AI-generated mannequin wearing the selected outfit" hidden><p class="fine">Generated from clothing names, colours and details. It is an interpretation, not an exact digital fitting. Your clothing photos are not sent to the AI service.</p></div><div class="eyebrow">THE PIECES SELECTED</div>${pieces}${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
+ $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())} · ${esc(dressCode.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="fine">${esc(lastOutfitReason)}</p><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware":cond==="cold"?"Cold-weather":cond==="hot"?"Warm-weather":"Weather-balanced"} · ${activity?esc(activity):"Everyday styling"}</p><div class="ai-preview"><div class="eyebrow">AI MANNEQUIN PREVIEW</div><div class="ai-preview-status" id="aiPreviewStatus">Preparing your outfit illustration…</div><img id="aiMannequinImage" alt="AI-generated mannequin wearing the selected outfit" hidden><p class="fine">Generated from clothing names, colours and details. It is an interpretation, not an exact digital fitting. Your clothing photos are not sent to the AI service.</p></div><div class="eyebrow">THE PIECES SELECTED</div>${pieces}${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
  $("#again").onclick=()=>$("#generate").click();
  $("#saveLook").onclick=()=>{let saved=JSON.parse(localStorage.getItem("wardrobe.saved")||"[]");saved.unshift({event,ids:out.map(x=>x.id),date:new Date().toISOString(),mockupPrompt:prompt});localStorage.setItem("wardrobe.saved",JSON.stringify(saved));toast("Look saved")};
  const status=$("#aiPreviewStatus"),img=$("#aiMannequinImage");

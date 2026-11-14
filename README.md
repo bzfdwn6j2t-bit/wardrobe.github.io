@@ -1,4 +1,4 @@
-# WARDROBE v6 — AI mannequin preview
+# WARDROBE v11 — context-aware outfit styling
 
 This release restores an actual AI-generated mannequin image in the Stylist. It uses Cloudflare Workers AI with FLUX.1 Schnell.
 
@@ -95,3 +95,8 @@ To update the website, replace the seven website files in your existing GitHub P
 - John Lewis & Partners, “Guide to Smart Casual Dressing for Men” (2026): https://www.johnlewis.com/content/fashion/men/guide-to-smart-casual-dressing-for-men
 
 These are inspiration sources for compatibility heuristics, not a guarantee that any one pairing will suit every shade, cut or personal preference.
+
+
+## v11: occasion-aware dress-code inference
+
+The Stylist interprets the occasion and free-text activity together, then infers **casual**, **smart casual**, or **formal** before selecting garments. Clear cues such as “pub with friends”, “weekend coffee”, “date night”, “wine tasting”, “business meeting”, or “wedding” influence the whole combination: tops, bottoms, shoes and layers. Explicit casual wording wins over generic dinner/date cues, while explicit “smart casual” and formal dress-code instructions are respected. The selected dress code is shown with the outfit and passed into the AI mannequin prompt. The style-direction selector gently refines ambiguous prompts rather than overriding a clearly stated occasion.
