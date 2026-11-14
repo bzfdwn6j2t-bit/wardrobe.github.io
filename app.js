@@ -324,7 +324,13 @@ function choose(event,temp,cond,style,activity=""){
 }
 
 const AI_CONFIG_KEY="wardrobe.ai.connection.v1";
-function readAIConfig(){try{return JSON.parse(localStorage.getItem(AI_CONFIG_KEY)||"{}")}catch(e){return {}}}
+const BUILT_IN_AI_CONFIG={url:"https://wardrobe-ai.jonathandring.workers.dev",token:"WT9w68ZJIzHWIqlRPjZBlA9cP1HeubxcZywXGD2gUXs"};
+function readAIConfig(){
+ try{
+  const saved=JSON.parse(localStorage.getItem(AI_CONFIG_KEY)||"{}");
+  return saved.url&&saved.token?saved:BUILT_IN_AI_CONFIG;
+ }catch(e){return BUILT_IN_AI_CONFIG}
+}
 function refreshAIConfig(){
  const c=readAIConfig(),u=$("#aiWorkerUrl"),k=$("#aiAccessKey"),st=$("#aiConfigStatus");
  if(u)u.value=c.url||"";if(k)k.value=c.token||"";
