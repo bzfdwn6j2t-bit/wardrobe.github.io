@@ -98,12 +98,18 @@ function colourFamily(value){
  return "unknown";
 }
 function garmentFormality(x){
- const t=`${x.name} ${x.notes||""} ${x.style||""}`.toLowerCase();
- if(/tuxedo|dinner jacket|suit|formal|dress shoe|oxford shoe|tailored trouser/.test(t))return 4;
- if(/blazer|loafer|derby|oxford shirt|chino|smart casual|knit polo/.test(t))return 3;
- if(/overshirt|polo|dark denim|clean sneaker|crew.?neck|jumper|cardigan/.test(t))return 2;
- if(/hoodie|jogger|running|gym|track|cargo|graphic tee/.test(t))return 1;
- return ({Formal:4,"Smart casual":3,Versatile:2,Casual:1,Sporty:1}[x.style]??2);
+ const t=`${x.name} ${x.notes||""}`.toLowerCase();
+ const st=String(x.style||"").toLowerCase();
+ // The user's explicit item style is the strongest signal. Garment names refine it,
+ // but chinos and ordinary shirts are not automatically treated as smart/formal.
+ if(st==="formal")return 4;
+ if(st==="smart casual")return 3;
+ if(st==="casual"||st==="sporty")return 1;
+ if(/tuxedo|dinner jacket|black tie|suit jacket|formal shoe|oxford shoe|dress shoe|tailcoat/.test(t))return 4;
+ if(/blazer|tailored trouser|dress shirt|formal shirt|business shirt|oxford shirt|loafer|derby shoe|chelsea boot/.test(t))return 3;
+ if(/t.?shirt|tee|hoodie|sweatshirt|jogger|running|gym|track|graphic tee|cargo short/.test(t))return 1;
+ if(/polo|overshirt|chino|jeans?|denim|casual trouser|shorts|crew.?neck|jumper|sweater|cardigan|trainer|sneaker|bomber|shacket/.test(t))return 2;
+ return 2;
 }
 function paletteScore(top,bottom){
  const a=colourFamily(top.colour),b=colourFamily(bottom.colour);
@@ -195,16 +201,66 @@ function pairCompatibility(top,bottom,event,activity,style,dressCode){
  score+=Math.min(1.2,trendScore(top)*.2+trendScore(bottom)*.2);
  return {...palette,score};
 }
-function chooseBestPair(tops,bottoms,event,activity,style,dressCode){
+function recentOutfitIds(){
+ try{return (JSON.parse(localStorage.getItem("wardrobe.saved")||"[]").slice(0,5)).flatMap(x=>x.ids||[])}
+ catch(e){return []}
+}
+function usePenalty(x,recent){
+ // A small rotation nudge, not a hard exclusion: every item remains eligible.
+ const count=recent.filter(id=>id===x.id).length;
+ return Math.min(2.4,count*.8);
+}
+function itemText(x){return `${x.name||""} ${x.notes||""} ${x.style||""}`.toLowerCase()}
+function isCasualTop(x){return /t.?shirt|\\btee\\b|polo|sweatshirt|hoodie|crew.?neck|jumper|sweater|casual knit|overshirt|flannel|camp.?collar|cuban shirt/.test(itemText(x)) || x.style==="Casual" || x.style==="Sporty"}
+function isFormalTop(x){return /tuxedo|dress shirt|formal shirt|business shirt|oxford shirt|evening shirt/.test(itemText(x)) || x.style==="Formal"}
+function pairCompatibility(top,bottom,event,activity,style,dressCode,recent=[]){
+ const palette=paletteScore(top,bottom);
+ let score=palette.score;
+ const f1=garmentFormality(top),f2=garmentFormality(bottom);
+ score-=Math.abs(f1-f2)*.55;
+ const topText=itemText(top),bottomText=itemText(bottom);
+ const casualBottom=/jeans?|denim|casual trouser|cargo|shorts|chinos?/.test(bottomText);
+ const tailoredBottom=/tailored|suit trouser|dress trouser/.test(bottomText);
+ if(dressCode==="formal"){
+  score+=(f1>=3?4:-4)+(f2>=3?4:-4);
+ }else if(dressCode==="smart casual"){
+  score+=(f1>=2&&f1<=3?2.8:-1.8)+(f2>=2&&f2<=3?2.8:-1.8);
+  if(/tuxedo|dinner jacket|suit trouser/.test(topText+" "+bottomText))score-=3;
+ }else{
+  score+=(f1<=2?3.5:-4)+(f2<=2?2.8:-3);
+  if(isCasualTop(top))score+=2.2;
+  if(isFormalTop(top))score-=4.5;
+  if(casualBottom)score+=1.3;
+  if(tailoredBottom)score-=2.2;
+ }
+ // Use style labels consistently for all categories; avoid treating chinos as inherently dressy.
+ if(style==="smart"&&dressCode!=="casual")score+=(f1>=2?0.5:0)+(f2>=2?0.5:0);
+ if(style==="relaxed"&&dressCode!=="formal")score+=(f1<=2?0.8:0)+(f2<=2?0.8:0);
+ score-=usePenalty(top,recent)+usePenalty(bottom,recent);
+ // Trend is a subtle tie-breaker, never enough to outweigh occasion or compatibility.
+ score+=Math.min(.45,trendScore(top)*.06+trendScore(bottom)*.06);
+ return {...palette,score};
+}
+function chooseBestPair(tops,bottoms,event,activity,style,dressCode,recent=[]){
  const pairs=[];
+ // Every eligible top is paired against every eligible bottom. No top-N pre-filter.
  for(const top of tops)for(const bottom of bottoms){
-   const c=pairCompatibility(top,bottom,event,activity,style,dressCode);
+   const c=pairCompatibility(top,bottom,event,activity,style,dressCode,recent);
    pairs.push({top,bottom,...c});
  }
- pairs.sort((a,b)=>b.score-a.score);
  if(!pairs.length)return {top:pickTrendAware(tops),bottom:pickTrendAware(bottoms),reason:"Not enough wardrobe options to compare combinations."};
- const best=pairs[0],near=pairs.filter(p=>p.score>=best.score-1);
- const chosen=near[Math.floor(Math.random()*Math.min(2,near.length))]||best;
+ pairs.sort((a,b)=>b.score-a.score);
+ const best=pairs[0];
+ // Keep a broad, high-quality choice pool so repeated generations rotate through
+ // genuinely good alternatives instead of the same two garments.
+ const pool=pairs.filter(p=>p.score>=best.score-2.0);
+ const ranked=pool.map(p=>({...p,rotation:Math.random()})).sort((a,b)=>(b.score+b.rotation*.55)-(a.score+a.rotation*.55));
+ let chosen=ranked[0]||best;
+ // Avoid duplicate colour families only when there is a similarly good alternative.
+ if(chosen.top&&chosen.bottom&&colourFamily(chosen.top.colour)===colourFamily(chosen.bottom.colour)){
+   const contrast=ranked.find(p=>colourFamily(p.top.colour)!==colourFamily(p.bottom.colour)&&p.score>=chosen.score-1.1);
+   if(contrast)chosen=contrast;
+ }
  return {...chosen,reason:chosen.reason};
 }
 
@@ -225,41 +281,45 @@ function layerScore(x,formal,cold,weather){
 }
 function choose(event,temp,cond,style,activity=""){
  const dressCode=inferDressCode(event,activity,style);
- let by=c=>items.filter(x=>x.category===c),layers=by("Layers"),tops=by("Tops"),bottoms=by("Bottoms");
- const pair=chooseBestPair(tops,bottoms,event,activity,style,dressCode);
+ const by=c=>items.filter(x=>x.category===c);
+ const layers=by("Layers"),tops=by("Tops"),bottoms=by("Bottoms"),shoes=by("Shoes"),accessories=by("Accessories");
+ const recent=recentOutfitIds();
+ const pair=chooseBestPair(tops,bottoms,event,activity,style,dressCode,recent);
  let out=[pair.top,pair.bottom].filter(Boolean),formal=dressCode==="formal",cold=temp<=12;
  let reasons=[pair.reason];
- // Choose footwear compatible with both the dress code and palette, not at random.
- const shoes=by("Shoes");
- if(shoes.length&&pair.top&&pair.bottom){
-   shoes.sort((a,b)=>{
-     const shoeScore=x=>{
-       let s=-Math.abs(garmentFormality(x)-Math.round((garmentFormality(pair.top)+garmentFormality(pair.bottom))/2))*1.8;
-       const c=colourFamily(x.colour),bottom=colourFamily(pair.bottom.colour);
-       if(["brown","earth","warm-neutral","black"].includes(c))s+=1;
-       if(c==="light-neutral"&&bottom!=="light-neutral")s+=.8;
-       if(formal&&garmentFormality(x)>=3)s+=3;
-       if(dressCode==="casual"&&garmentFormality(x)<=2)s+=2;
-       if(dressCode==="smart casual"&&garmentFormality(x)>=2&&garmentFormality(x)<=3)s+=1.5;
-       return s+trendScore(x)*.1;
-     };return shoeScore(b)-shoeScore(a);
-   });
-   out.push(shoes[0]);
- }
- // Layers are optional. Add only when temperature, weather or a genuinely formal setting calls for one.
- let needsLayer=cold||cond==="rain"||cond==="wind"||(/\b(outdoors|outside|boat|coastal|open air|walk|hike)\b/i.test(activity)&&temp<18)||formal;
+ const target= dressCode==="formal"?3.5:dressCode==="smart casual"?2.7:1.7;
+ const shoeScore=x=>{
+   let s=3-Math.abs(garmentFormality(x)-target)*1.6;
+   const c=colourFamily(x.colour),bottom=colourFamily(pair.bottom?.colour);
+   if(["earth","warm-neutral","black","grey"].includes(c))s+=.45;
+   if(c==="light-neutral"&&bottom!=="light-neutral")s+=.35;
+   if(dressCode==="casual"&&garmentFormality(x)<=2)s+=1.5;
+   if(dressCode==="casual"&&garmentFormality(x)>=3)s-=3;
+   if(dressCode==="formal"&&garmentFormality(x)>=3)s+=2;
+   return s-usePenalty(x,recent)+trendScore(x)*.04;
+ };
+ if(shoes.length){const ranked=[...shoes].sort((a,b)=>shoeScore(b)-shoeScore(a));out.push(ranked[0])}
+ const needsLayer=cold||cond==="rain"||cond==="wind"||(/outdoors|outside|boat|coastal|open air|walk|hike/i.test(activity)&&temp<18)||formal;
  if(needsLayer&&layers.length){
-   let candidates=layers.filter(x=>formal||cold||!isBlazer(x));
-   candidates.sort((a,b)=>layerScore(b,formal,cold,cond)-layerScore(a,formal,cold,cond));
-   let chosen=candidates[0];
+   const layerScoreFor=x=>layerScore(x,formal,cold,cond)-usePenalty(x,recent)+(dressCode==="casual"&&isBlazer(x)?-10:0);
+   const candidates=[...layers].filter(x=>formal||cold||!isBlazer(x)).sort((a,b)=>layerScoreFor(b)-layerScoreFor(a));
+   const chosen=candidates[0];
    if(chosen&&(!isBlazer(chosen)||formal||cold)){out.push(chosen);reasons.push(`A ${chosen.name} is included for ${formal?"the formal setting":cold?"the colder temperature":cond==="rain"?"rain protection":cond==="wind"?"wind protection":"the outdoor activity"}.`)}
  }
+ // Add a finishing touch only when it improves the outfit; consider every accessory.
+ if(accessories.length){
+   const accessoryScore=x=>{
+     let s=0,t=itemText(x);
+     if(dressCode==="formal"&&/tie|pocket square|belt|watch|leather/.test(t))s+=1.4;
+     if(dressCode!=="formal"&&/cap|beanie|watch|belt|bracelet|sunglasses/.test(t))s+=1;
+     if(out.some(y=>colourFamily(y.colour)===colourFamily(x.colour))&&colourFamily(x.colour)!=="unknown")s+=.4;
+     return s-usePenalty(x,recent)+trendScore(x)*.04;
+   };
+   const bestAccessory=[...accessories].sort((a,b)=>accessoryScore(b)-accessoryScore(a))[0];
+   if(bestAccessory&&accessoryScore(bestAccessory)>.2)out.push(bestAccessory);
+ }
  if(dressCode!=="formal")out=out.filter(x=>!isBlazer(x));
- const accessories=by("Accessories");
- if(accessories.length&&Math.random()>.7)out.push(pickTrendAware(accessories));
- if(style==="smart"||formal||["Work","Date night"].includes(event))
-   out.sort((a,b)=>({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[a.style]??2)-({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[b.style]??2));
- lastOutfitReason=`Inferred dress code: ${dressCode}. `+reasons.filter(Boolean).join(" ");
+ lastOutfitReason=`Inferred dress code: ${dressCode}. Compared ${tops.length} tops × ${bottoms.length} bottoms (${tops.length*bottoms.length} combinations), plus ${shoes.length} shoes, ${layers.length} layers and ${accessories.length} accessories. `+reasons.filter(Boolean).join(" ");
  return out;
 }
 
