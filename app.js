@@ -288,6 +288,14 @@ function chooseBestPair(tops,bottoms,event,activity,style,dressCode,recent=[]){
 }
 
 function isBlazer(x){return /blazer|suit jacket|dinner jacket|tuxedo/i.test(`${x.name} ${x.notes||""}`)}
+function isKnitLayer(x){
+ const t=itemText(x);
+ return /\\b(quarter.?zip|half.?zip|zip.?neck|jumper|sweater|knit|crew.?neck|cardigan)\\b/.test(t);
+}
+function isKnitTop(x){
+ const t=itemText(x);
+ return /\\b(quarter.?zip|half.?zip|zip.?neck|jumper|sweater|knit|crew.?neck|cardigan)\\b/.test(t);
+}
 function isFormalActivity(event,activity,style){
  const t=`${event} ${activity}`.toLowerCase();
  return /\b(black tie|formal|wedding|gala|ceremony|award|cocktail attire|business formal|suit and tie)\b/.test(t);
@@ -325,7 +333,10 @@ function choose(event,temp,cond,style,activity=""){
  const needsLayer=cold||cond==="rain"||cond==="wind"||(/outdoors|outside|boat|coastal|open air|walk|hike/i.test(activity)&&temp<18)||formal;
  if(needsLayer&&layers.length){
    const layerScoreFor=x=>layerScore(x,formal,cold,cond)-usePenalty(x,recent)+(dressCode==="casual"&&isBlazer(x)?-10:0);
-   const candidates=[...layers].filter(x=>formal||cold||!isBlazer(x)).sort((a,b)=>layerScoreFor(b)-layerScoreFor(a));
+   const topIsKnit=isKnitTop(pair.top);
+   const candidates=[...layers]
+     .filter(x=>(formal||cold||!isBlazer(x)) && !(topIsKnit&&isKnitLayer(x)))
+     .sort((a,b)=>layerScoreFor(b)-layerScoreFor(a));
    const chosen=candidates[0];
    if(chosen&&(!isBlazer(chosen)||formal||cold)){out.push(chosen);reasons.push(`A ${chosen.name} is included for ${formal?"the formal setting":cold?"the colder temperature":cond==="rain"?"rain protection":cond==="wind"?"wind protection":"the outdoor activity"}.`)}
  }
@@ -486,9 +497,33 @@ $("#lookupFlight").onclick=async()=>{
     toast("Flight lookup unavailable");
   }finally{$("#lookupFlight").disabled=false}
 };
-function tripItems(outfits,climate,acts){let get=c=>items.filter(x=>x.category===c).sort((a,b)=>$("#light").checked?b.warmth-a.warmth:a.warmth-b.warmth);let tops=Math.max(1,Math.ceil(outfits*.7)),bottoms=Math.max(1,Math.ceil(outfits*.5));return [...get("Tops").slice(0,Math.min(outfits,tops)),...get("Bottoms").slice(0,Math.min(outfits,bottoms)),...get("Layers").slice(0,climate==="hot"?1:climate==="cold"?3:2),...get("Shoes").slice(0,acts.includes("Exploring")?2:1),...get("Accessories").slice(0,2)]}
+function tripItems(outfits,climate,acts,planText=""){
+ const plan=planText.toLowerCase();
+ const formalPlan=/\\b(formal|black tie|wedding|gala|ceremony|business meeting|business formal|suit and tie|cocktail attire)\\b/.test(plan);
+ const get=c=>items.filter(x=>x.category===c);
+ const tops=Math.max(1,Math.ceil(outfits*.7)),bottoms=Math.max(1,Math.ceil(outfits*.5));
+ const layers=get("Layers").filter(x=>formalPlan||!isBlazer(x)).sort((a,b)=>{
+   const score=x=>{
+     const t=itemText(x);let s=0;
+     if(formalPlan&&isBlazer(x))s+=12;
+     if(!formalPlan&&/\\b(overshirt|shacket|bomber|denim jacket|casual jacket|hoodie|cardigan|jumper|sweater)\\b/.test(t))s+=5;
+     if(/\\b(coat|parka|puffer|waterproof|shell)\\b/.test(t))s+=climate==="cold"||climate==="wet"?7:1;
+     if(climate==="cold")s+=(Number(x.warmth)||0)*1.4;
+     if(climate==="hot")s-=(Number(x.warmth)||0)*.8;
+     if($("#light").checked)s-=Math.max(0,Number(x.warmth)||0)*.15;
+     return s;
+   };
+   return score(b)-score(a);
+ });
+ const layerCount=climate==="hot"?0:climate==="cold"?2:1;
+ return [...get("Tops").slice(0,Math.min(outfits,tops)),
+   ...get("Bottoms").slice(0,Math.min(outfits,bottoms)),
+   ...layers.slice(0,layerCount),
+   ...get("Shoes").slice(0,acts.includes("Exploring")?2:1),
+   ...get("Accessories").slice(0,2)];
+}
 function dateDiff(a,b){return Math.max(0,Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000))}
-$("#plan").onclick=async()=>{let dest=$("#destination").value.trim(),start=$("#start").value,end=$("#end").value,arrivalDate=$("#arrivalDate").value||start,arrivalTime=$("#arrivalTime").value;if(!dest||!start||!end){toast("Add destination and flight dates");return}if(end<arrivalDate){toast("Return date must be on or after your arrival date");return}let span=dateDiff(arrivalDate,end),lateArrival=arrivalTime&&arrivalTime>="17:00",outfits=Math.max(1,span+(lateArrival?0:1)),acts=$$("#activities input:checked").map(x=>x.value),climate=$("#climate").value,weather="Weather estimate unavailable";if(span>21){toast("Prototype supports trips up to 21 days");return}if(climate==="auto"){try{let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(dest)}&count=1&language=en&format=json`).then(r=>r.json());if(g.results?.length){let p=g.results[0],f=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&daily=temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=auto`).then(r=>r.json());weather=`Forecast: ${Math.min(...f.daily.temperature_2m_min)}–${Math.max(...f.daily.temperature_2m_max)}°C`}}catch(e){weather="Live forecast unavailable; check conditions before packing"}}else weather=({hot:"Hot / humid selected",mild:"Mild conditions selected",cold:"Cold conditions selected",wet:"Wet / rainy selected"})[climate];let pack=tripItems(outfits,climate,acts),daysList=Array.from({length:span+1},(_,i)=>{let d=new Date(new Date(arrivalDate+"T12:00:00").getTime()+i*86400000);return d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})}),topItems=pack.filter(x=>x.category==="Tops"),bottomItems=pack.filter(x=>x.category==="Bottoms"),shoe=pack.find(x=>x.category==="Shoes");$("#tripResult").classList.remove("hidden");$("#tripResult").innerHTML=`<div class="eyebrow">YOUR TRAVEL EDIT</div><h2>${esc(dest)}</h2><p class="muted">${span+1} calendar day${span===0?"":"s"} at destination · ${outfits} outfit${outfits===1?"":"s"} estimated · ${weather}</p><div class="flight-summary"><b>FLIGHT ARRIVAL</b><strong>${arrivalDate}${arrivalTime?" · "+arrivalTime:" · time not confirmed"}</strong><small>${lastFlight?esc(lastFlight.flight_no||$("#flightNumber").value):"Manually entered / estimated"} · local destination time</small></div><h3>Daily outfit schedule</h3>${daysList.map((d,i)=>{let type=i===0?(lateArrival?"Late arrival · no separate daytime outfit":"Arrival day · daytime outfit"):i===span?"Departure day · travel outfit":"Full day · daytime outfit";let pieces=[topItems.length?topItems[i%topItems.length]:null,bottomItems.length?bottomItems[i%bottomItems.length]:null,shoe].filter(Boolean).map(x=>esc(x.name)).join(" · ");return `<div class="pack-day"><h4>${d}</h4><p>${type}</p><p>${pieces||"Add more wardrobe pieces to build complete looks."}</p></div>`}).join("")}<h3>Packing checklist · ${pack.length} pieces</h3><div class="pack-list">${pack.map(x=>`<label><input type="checkbox"> ${esc(x.name)}</label>`).join("")}</div>${!pack.length?"<p class='muted'>Add wardrobe pieces to create a packing list.</p>":""}<p class="fine">Outfit count assumes one daytime outfit on arrival if you land before 17:00, one for each full day, and a travel outfit on departure. You can adjust this estimate for your plans.</p>`};
+$("#plan").onclick=async()=>{let dest=$("#destination").value.trim(),start=$("#start").value,end=$("#end").value,arrivalDate=$("#arrivalDate").value||start,arrivalTime=$("#arrivalTime").value,planText=$("#tripPlan").value.trim();if(!dest||!start||!end){toast("Add destination and flight dates");return}if(end<arrivalDate){toast("Return date must be on or after your arrival date");return}let span=dateDiff(arrivalDate,end),lateArrival=arrivalTime&&arrivalTime>="17:00",outfits=Math.max(1,span+(lateArrival?0:1)),acts=$$("#activities input:checked").map(x=>x.value),climate=$("#climate").value,weather="Weather estimate unavailable";if(span>21){toast("Prototype supports trips up to 21 days");return}if(climate==="auto"){try{let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(dest)}&count=1&language=en&format=json`).then(r=>r.json());if(g.results?.length){let p=g.results[0],f=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&daily=temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=auto`).then(r=>r.json());weather=`Forecast: ${Math.min(...f.daily.temperature_2m_min)}–${Math.max(...f.daily.temperature_2m_max)}°C`}}catch(e){weather="Live forecast unavailable; check conditions before packing"}}else weather=({hot:"Hot / humid selected",mild:"Mild conditions selected",cold:"Cold conditions selected",wet:"Wet / rainy selected"})[climate];let pack=tripItems(outfits,climate,acts,planText),daysList=Array.from({length:span+1},(_,i)=>{let d=new Date(new Date(arrivalDate+"T12:00:00").getTime()+i*86400000);return d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})}),topItems=pack.filter(x=>x.category==="Tops"),bottomItems=pack.filter(x=>x.category==="Bottoms"),shoe=pack.find(x=>x.category==="Shoes"),layerItems=pack.filter(x=>x.category==="Layers");$("#tripResult").classList.remove("hidden");$("#tripResult").innerHTML=`<div class="eyebrow">YOUR TRAVEL EDIT</div><h2>${esc(dest)}</h2><p class="muted">${span+1} calendar day${span===0?"":"s"} at destination · ${outfits} outfit${outfits===1?"":"s"} estimated · ${weather}</p><div class="flight-summary"><b>FLIGHT ARRIVAL</b><strong>${arrivalDate}${arrivalTime?" · "+arrivalTime:" · time not confirmed"}</strong><small>${lastFlight?esc(lastFlight.flight_no||$("#flightNumber").value):"Manually entered / estimated"} · local destination time</small></div>${planText?`<div class="flight-summary"><b>YOUR PLANS</b><p>${esc(planText)}</p></div>`:""}<h3>Daily outfit schedule</h3>${daysList.map((d,i)=>{let type=i===0?(lateArrival?"Late arrival · no separate daytime outfit":"Arrival day · daytime outfit"):i===span?"Departure day · travel outfit":"Full day · daytime outfit";let pieces=[topItems.length?topItems[i%topItems.length]:null,bottomItems.length?bottomItems[i%bottomItems.length]:null,layerItems.length?layerItems[i%layerItems.length]:null,shoe].filter(Boolean).map(x=>esc(x.name)).join(" · ");return `<div class="pack-day"><h4>${d}</h4><p>${type}</p><p>${pieces||"Add more wardrobe pieces to build complete looks."}</p></div>`}).join("")}<h3>Packing checklist · ${pack.length} pieces</h3><div class="pack-list">${pack.map(x=>`<label><input type="checkbox"> ${esc(x.name)}</label>`).join("")}</div>${!pack.length?"<p class='muted'>Add wardrobe pieces to create a packing list.</p>":""}<p class="fine">Blazers are only included when your written plans indicate a genuinely formal occasion. Outfit count assumes one daytime outfit on arrival if you land before 17:00, one for each full day, and a travel outfit on departure. You can adjust this estimate for your plans.</p>`};
 $("#weatherOpen").onclick=()=>$("#weatherDialog").showModal();
 $("#weatherForm").onsubmit=async e=>{e.preventDefault();let loc=$("#location").value.trim();$("#weatherDialog").close();$("#weatherText").textContent="Checking weather…";try{let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(loc)}&count=1&language=en&format=json`).then(r=>r.json());if(!g.results?.length)throw Error("Location not found");let p=g.results[0],w=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,precipitation,wind_speed_10m&timezone=auto`).then(r=>r.json()),c=w.current;$("#weatherText").textContent=`${p.name} · ${Math.round(c.temperature_2m)}°C · ${c.precipitation>0?"Rain":c.wind_speed_10m>25?"Windy":"Dry"}`;$("#temp").value=Math.round(c.temperature_2m);$("#condition").value=c.precipitation>0?"rain":c.wind_speed_10m>25?"wind":"dry";localStorage.setItem("wardrobe.location",loc);toast("Weather updated")}catch(err){$("#weatherText").textContent="Weather unavailable — enter conditions manually";toast(err.message)}};
 let loc=localStorage.getItem("wardrobe.location");if(loc){$("#location").value=loc;$("#weatherText").textContent=`Saved location: ${loc}`;}
