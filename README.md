@@ -102,5 +102,5 @@ These are inspiration sources for compatibility heuristics, not a guarantee that
 The Stylist interprets the occasion and free-text activity together, then infers **casual**, **smart casual**, or **formal** before selecting garments. Clear cues such as “pub with friends”, “weekend coffee”, “date night”, “wine tasting”, “business meeting”, or “wedding” influence the whole combination: tops, bottoms, shoes and layers. Explicit casual wording wins over generic dinner/date cues, while explicit “smart casual” and formal dress-code instructions are respected. The selected dress code is shown with the outfit and passed into the AI mannequin prompt. The style-direction selector gently refines ambiguous prompts rather than overriding a clearly stated occasion.
 
 
-## AI connection
-The Cloudflare Worker URL and access key are preconfigured in the client app so setup is not required. **Important:** because this is a static GitHub Pages app, the embedded access key is visible to anyone who can inspect the published JavaScript. Rotate the Cloudflare `WARDROBE_TOKEN` if you later want to revoke this key.
+## V14 repair
+Fixed a startup crash caused by removing the AI setup form while leaving an unconditional event-handler assignment to its missing button. Bumped the service-worker cache to wardrobe-shell-v14 so clients fetch the repaired app files. Existing IndexedDB database name and schema are unchanged.

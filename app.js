@@ -6,7 +6,11 @@ function toast(s){let t=$("#toast");t.textContent=s;t.classList.add("show");setT
 function openDB(){return new Promise((resolve,reject)=>{if(!("indexedDB"in window)){reject(Error("IndexedDB unavailable"));return}let r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{let d=r.result;if(!d.objectStoreNames.contains("items"))d.createObjectStore("items",{keyPath:"id"})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 function dbRequest(mode,fn){return new Promise((resolve,reject)=>{if(!db){reject(Error("Local database unavailable"));return}let tx=db.transaction("items",mode),store=tx.objectStore("items"),req=fn(store);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);tx.onabort=()=>reject(tx.error)})}
 async function persistItems(){try{if(db){await new Promise((resolve,reject)=>{let tx=db.transaction("items","readwrite"),s=tx.objectStore("items");s.clear();items.forEach(x=>s.put(x));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)})}else localStorage.setItem(KEY,JSON.stringify(items));}catch(e){console.error(e);toast("Storage is full. Export a backup and remove some photos.")}updateStorageStatus()}
-async function initStorage(){try{db=await openDB();let saved=await dbRequest("readonly",s=>s.getAll());if(saved?.length){items=saved}else{let legacy=JSON.parse(localStorage.getItem(KEY)||"[]");items=legacy;if(legacy.length){await persistItems();localStorage.removeItem(KEY)}}if(navigator.storage?.persist)try{await navigator.storage.persist()}catch(e){}}catch(e){items=JSON.parse(localStorage.getItem(KEY)||"[]");$("#storageStatus").textContent="Basic browser storage is active; export backups regularly."}render();inspo();updateStorageStatus()}
+async function initStorage(){try{db=await openDB();let saved=await dbRequest("readonly",s=>s.getAll());if(saved?.length){items=saved}else{let legacy=JSON.parse(localStorage.getItem(KEY)||"[]");items=legacy;if(legacy.length){await persistItems();localStorage.removeItem(KEY)}}if(navigator.storage?.persist)try{await navigator.storage.persist()}catch(e){} }catch(e){
+ console.error("WARDROBE storage initialisation failed",e);
+ try{items=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(parseError){items=[]}
+ const status=$("#storageStatus");if(status)status.textContent="Using browser fallback storage · export a backup";
+ }render();inspo();updateStorageStatus()}
 async function updateStorageStatus(){let mb="";try{let e=await navigator.storage?.estimate?.();if(e?.usage!=null)mb=` · ${(e.usage/1048576).toFixed(1)} MB used`}catch(e){}let mode=db?"On this iPhone · IndexedDB":"On this iPhone · browser storage";let el=$("#storageStatus");if(el)el.textContent=`${mode} · ${items.length} pieces${mb}`}
 function go(p){$$(".page").forEach(x=>x.classList.toggle("active",x.id===p));$$("nav button").forEach(x=>x.classList.toggle("active",x.dataset.go===p));scrollTo(0,0)}
 $$("nav button").forEach(b=>b.onclick=()=>go(b.dataset.go));
@@ -336,12 +340,13 @@ function refreshAIConfig(){
  if(u)u.value=c.url||"";if(k)k.value=c.token||"";
  if(st)st.textContent=c.url&&c.token?"AI connection saved on this iPhone.":"Not connected yet. Your wardrobe photos are not uploaded; only clothing descriptions are sent.";
 }
-$("#saveAiConfig").onclick=()=>{
- const url=$("#aiWorkerUrl").value.trim().replace(/\/+$/,""),token=$("#aiAccessKey").value.trim();
+const saveAiConfigButton=$("#saveAiConfig");
+if(saveAiConfigButton)saveAiConfigButton.onclick=()=>{
+ const url=$("#aiWorkerUrl")?.value.trim().replace(/\/+$/,"")||"",token=$("#aiAccessKey")?.value.trim()||"";
  if(!/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/.*)?$/i.test(url)){toast("Enter your HTTPS Cloudflare Worker URL");return}
  if(token.length<20){toast("Enter the private access key from your Worker");return}
  localStorage.setItem(AI_CONFIG_KEY,JSON.stringify({url,token}));
- refreshAIConfig();toast("AI connection saved on this iPhone");
+ refreshAIConfig();toast("AI connection saved on this device");
 };
 function makeMannequinPrompt(out,event,temp,cond,activity="",dressCode="casual"){
  const garments=out.map(x=>`${label[x.category]}: ${x.name}${x.colour?`, ${x.colour}`:""}${x.style?`, ${x.style}`:""}${x.notes?`, ${x.notes}`:""}`).join("; ");
