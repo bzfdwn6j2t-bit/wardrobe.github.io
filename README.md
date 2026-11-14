@@ -1,15 +1,6 @@
-# WARDROBE v7 — editable wardrobe & flexible trip planner
+# WARDROBE v6 — AI mannequin preview
 
-This release keeps the AI-generated mannequin image in the Stylist, and adds editable wardrobe items plus a trip planner for work trips, holidays and mixed trips. It continues to use Cloudflare Workers AI with FLUX.1 Schnell.
-
-## What is new in v7
-
-- Edit an existing wardrobe item, including its name, category, colour, style, warmth, notes, uniform flag and photo. Existing item IDs and saved photos are retained unless you deliberately replace or remove a photo.
-- Notes are now visible directly on wardrobe cards.
-- Choose a work trip, holiday or mixed trip; explicitly say whether you are working and whether laundry is available.
-- When working with laundry available, uniform shirts are not added. When working without laundry, the planner suggests one uniform shirt per working day; that number is editable. Mark a wardrobe item as a uniform/work shirt to have it named in the checklist.
-- Add a free-text itinerary. Keywords such as boat, wine tasting, dinner, meetings, exploring, gym and running guide packing priorities and daily suggestions.
-- Record gym and running sessions. Underwear is calculated as one per calendar trip day plus editable extras for flight days and exercise sessions; socks are one per trip day plus editable exercise extras. The formula and every extra are shown in the result.
+This release restores an actual AI-generated mannequin image in the Stylist. It uses Cloudflare Workers AI with FLUX.1 Schnell.
 
 ## Important: keep your wardrobe data
 
@@ -67,4 +58,15 @@ Cloudflare's free Worker plan also has request limits. The Worker is designed fo
 - **Missing AI binding:** add a Workers AI binding named `AI`.
 - **Daily allowance reached:** wait until 00:00 UTC.
 - **Worker URL error:** use the complete `https://...workers.dev` URL.
-- **Old app still showing:** close and reopen the installed WARDROBE app after GitHub Pages deploys. The service-worker cache has been bumped to v7.
+- **Old app still showing:** close and reopen the installed WARDROBE app after GitHub Pages deploys. The service-worker cache has been bumped to v6.
+
+
+## Version 7 — activity-aware outfit suggestions
+
+- The Stylist page now includes a free-text activity/setting field.
+- The activity is included in the AI mannequin prompt.
+- Outfit selection treats layers as optional rather than automatically adding one.
+- Suit blazers are excluded from smart-casual activities (such as wine tasting) unless the setting is explicitly formal or cold weather makes a layer appropriate.
+- Weather and activity cues can still trigger practical outerwear.
+
+To update the website, replace the seven website files in your existing GitHub Pages repository. Keep your Cloudflare Worker and its settings unchanged; this release does not require changes to Cloudflare.
