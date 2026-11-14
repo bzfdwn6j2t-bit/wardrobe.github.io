@@ -350,7 +350,7 @@ function choose(event,temp,cond,style,activity=""){
 }
 
 const AI_CONFIG_KEY="wardrobe.ai.connection.v1";
-const BUILT_IN_AI_CONFIG={url:"https://wardrobe-ai.jonathandring.workers.dev",token:"WT9w68ZJIzHWIqlRPjZBlA9cP1HeubxcZywXGD2gUXs"};
+const BUILT_IN_AI_CONFIG={url:"https://wardrobe-ai.jonathanldring.workers.dev",token:"WT9w68ZJIzHWIqlRPjZBlA9cP1HeubxcZywXGD2gUXs"};
 function readAIConfig(){
  try{
   const saved=JSON.parse(localStorage.getItem(AI_CONFIG_KEY)||"{}");
