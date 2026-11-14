@@ -215,57 +215,76 @@ function usePenalty(x,recent){
  return Math.min(2.4,count*.8);
 }
 function itemText(x){return `${x.name||""} ${x.notes||""} ${x.style||""}`.toLowerCase()}
-function isCasualTop(x){return /t.?shirt|\\btee\\b|polo|sweatshirt|hoodie|crew.?neck|jumper|sweater|casual knit|overshirt|flannel|camp.?collar|cuban shirt/.test(itemText(x)) || x.style==="Casual" || x.style==="Sporty"}
-function isFormalTop(x){return /tuxedo|dress shirt|formal shirt|business shirt|oxford shirt|evening shirt/.test(itemText(x)) || x.style==="Formal"}
-function pairCompatibility(top,bottom,event,activity,style,dressCode,recent=[]){
- const palette=paletteScore(top,bottom);
- let score=palette.score;
- const f1=garmentFormality(top),f2=garmentFormality(bottom);
- score-=Math.abs(f1-f2)*.55;
- const topText=itemText(top),bottomText=itemText(bottom);
- const casualBottom=/jeans?|denim|casual trouser|cargo|shorts|chinos?/.test(bottomText);
- const tailoredBottom=/tailored|suit trouser|dress trouser/.test(bottomText);
- if(dressCode==="formal"){
-  score+=(f1>=3?4:-4)+(f2>=3?4:-4);
- }else if(dressCode==="smart casual"){
-  score+=(f1>=2&&f1<=3?2.8:-1.8)+(f2>=2&&f2<=3?2.8:-1.8);
-  if(/tuxedo|dinner jacket|suit trouser/.test(topText+" "+bottomText))score-=3;
- }else{
-  score+=(f1<=2?3.5:-4)+(f2<=2?2.8:-3);
-  if(isCasualTop(top))score+=2.2;
-  if(isFormalTop(top))score-=4.5;
-  if(casualBottom)score+=1.3;
-  if(tailoredBottom)score-=2.2;
+function garmentType(x){
+ const t=itemText(x);
+ if(x.category==="Tops"){
+  if(/\b(t.?shirt|tee|graphic tee)\b/.test(t))return "tshirt";
+  if(/\bpolo\b/.test(t))return "polo";
+  if(/\b(hoodie|sweatshirt)\b/.test(t))return "sweatshirt";
+  if(/\b(knit|jumper|sweater|crew.?neck|cardigan)\b/.test(t))return "knit";
+  if(/\b(overshirt|shacket)\b/.test(t))return "overshirt";
+  if(/\b(shirt|oxford|flannel)\b/.test(t))return "shirt";
+  return "other-top";
  }
- // Use style labels consistently for all categories; avoid treating chinos as inherently dressy.
- if(style==="smart"&&dressCode!=="casual")score+=(f1>=2?0.5:0)+(f2>=2?0.5:0);
- if(style==="relaxed"&&dressCode!=="formal")score+=(f1<=2?0.8:0)+(f2<=2?0.8:0);
+ if(x.category==="Bottoms"){
+  if(/\bjeans?\b|denim/.test(t))return "jeans";
+  if(/\bchinos?\b/.test(t))return "chinos";
+  if(/\bshorts?\b/.test(t))return "shorts";
+  if(/\b(cargo|utility)\b/.test(t))return "cargo";
+  if(/\b(trouser|pants|slacks)\b/.test(t))return "trousers";
+  return "other-bottom";
+ }
+ return x.category;
+}
+function recentOutfitIds(){
+ try{return JSON.parse(localStorage.getItem("wardrobe.generated.recent")||"[]").slice(0,12).flat()}
+ catch(e){return []}
+}
+function usePenalty(x,recent){const count=recent.filter(id=>id===x.id).length;return Math.min(4,count*1.15)}
+function recordGeneratedOutfit(out){
+ try{const h=JSON.parse(localStorage.getItem("wardrobe.generated.recent")||"[]");h.unshift(out.map(x=>x.id));localStorage.setItem("wardrobe.generated.recent",JSON.stringify(h.slice(0,12)))}catch(e){}
+}
+function isCasualTop(x){return /\b(t.?shirt|tee|polo|sweatshirt|hoodie|crew.?neck|jumper|sweater|casual knit|overshirt|flannel|camp.?collar|cuban shirt)\b/.test(itemText(x)) || ["Casual","Sporty"].includes(x.style)}
+function isFormalTop(x){return /\b(tuxedo|dress shirt|formal shirt|business shirt|evening shirt)\b/.test(itemText(x)) || x.style==="Formal"}
+function pairCompatibility(top,bottom,event,activity,style,dressCode,recent=[]){
+ const palette=paletteScore(top,bottom);let score=palette.score;
+ const f1=garmentFormality(top),f2=garmentFormality(bottom),topType=garmentType(top),bottomType=garmentType(bottom);
+ score-=Math.abs(f1-f2)*.45;
+ if(dressCode==="formal")score+=(f1>=3?4:-4)+(f2>=3?4:-4);
+ else if(dressCode==="smart casual")score+=(f1>=2&&f1<=3?2.5:-1.2)+(f2>=2&&f2<=3?2.5:-1.2);
+ else{
+  score+=(f1<=2?3:-3)+(f2<=2?2.5:-2.5);
+  if(["tshirt","polo","sweatshirt","knit","overshirt"].includes(topType))score+=1.4;
+  if(isFormalTop(top))score-=4;
+ }
+ if(dressCode==="casual"){
+  if(bottomType==="jeans")score+=1.0;
+  if(bottomType==="chinos")score+=.15;
+  if(bottomType==="shorts"&&/summer|warm|hot|holiday|beach/i.test(`${event} ${activity}`))score+=1.2;
+ }
+ if(dressCode==="smart casual"){
+  if(["chinos","trousers","jeans"].includes(bottomType))score+=.5;
+  if(bottomType==="jeans"&&/dark|indigo|black|raw/.test(itemText(bottom)))score+=.45;
+ }
+ if(style==="smart"&&dressCode!=="casual")score+=(f1>=2?.5:0)+(f2>=2?.5:0);
+ if(style==="relaxed"&&dressCode!=="formal")score+=(f1<=2?.7:0)+(f2<=2?.7:0);
  score-=usePenalty(top,recent)+usePenalty(bottom,recent);
- // Trend is a subtle tie-breaker, never enough to outweigh occasion or compatibility.
- score+=Math.min(.45,trendScore(top)*.06+trendScore(bottom)*.06);
- return {...palette,score};
+ score+=Math.min(.3,trendScore(top)*.035+trendScore(bottom)*.035);
+ return {...palette,score,topType,bottomType};
 }
 function chooseBestPair(tops,bottoms,event,activity,style,dressCode,recent=[]){
  const pairs=[];
- // Every eligible top is paired against every eligible bottom. No top-N pre-filter.
- for(const top of tops)for(const bottom of bottoms){
-   const c=pairCompatibility(top,bottom,event,activity,style,dressCode,recent);
-   pairs.push({top,bottom,...c});
- }
- if(!pairs.length)return {top:pickTrendAware(tops),bottom:pickTrendAware(bottoms),reason:"Not enough wardrobe options to compare combinations."};
+ for(const top of tops)for(const bottom of bottoms)pairs.push({top,bottom,...pairCompatibility(top,bottom,event,activity,style,dressCode,recent)});
+ if(!pairs.length)return {top:null,bottom:null,reason:"Add at least one top and one bottom to build an outfit."};
  pairs.sort((a,b)=>b.score-a.score);
- const best=pairs[0];
- // Keep a broad, high-quality choice pool so repeated generations rotate through
- // genuinely good alternatives instead of the same two garments.
- const pool=pairs.filter(p=>p.score>=best.score-2.0);
- const ranked=pool.map(p=>({...p,rotation:Math.random()})).sort((a,b)=>(b.score+b.rotation*.55)-(a.score+a.rotation*.55));
+ const best=pairs[0],pool=pairs.filter(p=>p.score>=best.score-4.5);
+ const ranked=pool.map(p=>({...p,lottery:Math.random()*.85})).sort((a,b)=>(b.score+b.lottery)-(a.score+a.lottery));
  let chosen=ranked[0]||best;
- // Avoid duplicate colour families only when there is a similarly good alternative.
- if(chosen.top&&chosen.bottom&&colourFamily(chosen.top.colour)===colourFamily(chosen.bottom.colour)){
-   const contrast=ranked.find(p=>colourFamily(p.top.colour)!==colourFamily(p.bottom.colour)&&p.score>=chosen.score-1.1);
-   if(contrast)chosen=contrast;
+ if(colourFamily(chosen.top.colour)===colourFamily(chosen.bottom.colour)){
+  const contrast=ranked.find(p=>colourFamily(p.top.colour)!==colourFamily(p.bottom.colour)&&p.score>=chosen.score-1.8);
+  if(contrast)chosen=contrast;
  }
- return {...chosen,reason:chosen.reason};
+ return chosen;
 }
 
 function isBlazer(x){return /blazer|suit jacket|dinner jacket|tuxedo/i.test(`${x.name} ${x.notes||""}`)}
@@ -323,7 +342,10 @@ function choose(event,temp,cond,style,activity=""){
    if(bestAccessory&&accessoryScore(bestAccessory)>.2)out.push(bestAccessory);
  }
  if(dressCode!=="formal")out=out.filter(x=>!isBlazer(x));
- lastOutfitReason=`Inferred dress code: ${dressCode}. Compared ${tops.length} tops × ${bottoms.length} bottoms (${tops.length*bottoms.length} combinations), plus ${shoes.length} shoes, ${layers.length} layers and ${accessories.length} accessories. `+reasons.filter(Boolean).join(" ");
+ const bottomTypes=[...new Set(bottoms.map(garmentType))].join(", ")||"none";
+ const topTypes=[...new Set(tops.map(garmentType))].join(", ")||"none";
+ lastOutfitReason=`Inferred dress code: ${dressCode}. Considered ${tops.length} tops (${topTypes}) × ${bottoms.length} bottoms (${bottomTypes}) = ${tops.length*bottoms.length} combinations; also ${shoes.length} shoes, ${layers.length} layers and ${accessories.length} accessories. `+reasons.filter(Boolean).join(" ");
+ recordGeneratedOutfit(out);
  return out;
 }
 
@@ -354,12 +376,24 @@ function makeMannequinPrompt(out,event,temp,cond,activity="",dressCode="casual")
 }
 async function generateAIMannequin(prompt){
  const cfg=readAIConfig();
- if(!cfg.url||!cfg.token)throw new Error("Connect the free AI preview in the settings above first.");
- const res=await fetch(cfg.url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+cfg.token},body:JSON.stringify({prompt})});
- const data=await res.json().catch(()=>({}));
- if(!res.ok)throw new Error(data.error||`AI service returned ${res.status}. Check the Worker setup and daily free allowance.`);
- if(!data.image)throw new Error("The AI service returned no image. Please try again.");
- return data.image;
+ if(!cfg.url||!cfg.token)throw new Error("The Cloudflare AI connection is not configured.");
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),120000);
+ try{
+  const res=await fetch(cfg.url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+cfg.token},body:JSON.stringify({prompt}),signal:controller.signal});
+  const type=(res.headers.get("content-type")||"").toLowerCase();
+  if(!res.ok){
+   const body=type.includes("json")?await res.json().catch(()=>({})):await res.text().catch(()=>"");
+   throw new Error(body.error||body.message||`Cloudflare Worker returned HTTP ${res.status}${body?`: ${String(body).slice(0,180)}`:""}`);
+  }
+  if(type.startsWith("image/"))return URL.createObjectURL(await res.blob());
+  const data=await res.json().catch(()=>null);
+  if(!data||!data.image)throw new Error("The Worker responded, but did not return an image. Check the Cloudflare AI binding and model response.");
+  return data.image.startsWith("data:")?data.image:`data:image/jpeg;base64,${data.image}`;
+ }catch(e){
+  if(e.name==="AbortError")throw new Error("Image generation timed out after 2 minutes. Try again.");
+  if(e instanceof TypeError)throw new Error("Could not reach the Cloudflare Worker. Check its URL, CORS allowed origin and deployment.");
+  throw e;
+ }finally{clearTimeout(timeout)}
 }
 refreshAIConfig();
 

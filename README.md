@@ -104,3 +104,6 @@ The Stylist interprets the occasion and free-text activity together, then infers
 
 ## V14 repair
 Fixed a startup crash caused by removing the AI setup form while leaving an unconditional event-handler assignment to its missing button. Bumped the service-worker cache to wardrobe-shell-v14 so clients fetch the repaired app files. Existing IndexedDB database name and schema are unchanged.
+
+
+V15 improves outfit rotation across all eligible top/bottom combinations, adds recent-look rotation, reports garment-type coverage and improves AI error reporting. Redeploy cloudflare-worker.js to Cloudflare for the updated image-response handling; do not upload it to GitHub Pages.
