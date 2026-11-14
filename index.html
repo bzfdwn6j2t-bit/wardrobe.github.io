@@ -76,12 +76,12 @@
 <nav><button class="active" data-go="home"><b>⌂</b><small>Home</small></button><button data-go="wardrobe"><b>▦</b><small>Wardrobe</small></button><button data-go="stylist"><b class="center">✳</b><small>Stylist</small></button><button data-go="discover"><b>◇</b><small>Discover</small></button><button data-go="trips"><b>↗</b><small>Trips</small></button></nav>
 </div>
 <dialog id="itemDialog"><form id="itemForm" class="dialog">
-<div class="dialog-head"><div class="eyebrow">ADD TO YOUR COLLECTION<h2>New wardrobe piece</h2></div><button type="button" class="plain close" data-close="itemDialog">×</button></div>
+<div class="dialog-head"><div class="eyebrow">YOUR COLLECTION<h2 id="itemFormTitle">New wardrobe piece</h2></div><button type="button" class="plain close" data-close="itemDialog">×</button></div>
 <label class="photo"><span id="preview">＋</span><b>Add a photo</b><small>Individual item photos work best</small><input id="photo" type="file" accept="image/*" capture="environment"></label>
 <label>What is it called?<input id="name" required placeholder="e.g. Navy Oxford shirt"></label>
 <div class="two"><label>Category<select id="category"><option>Tops</option><option>Bottoms</option><option>Layers</option><option>Shoes</option><option>Accessories</option></select></label><label>Colour<input id="colour" placeholder="e.g. Navy"></label></div>
 <div class="two"><label>Style<select id="itemStyle"><option>Versatile</option><option>Casual</option><option>Smart casual</option><option>Formal</option><option>Sporty</option></select></label><label>Warmth<select id="warmth"><option value="1">Light</option><option value="2" selected>Midweight</option><option value="3">Warm</option></select></label></div>
-<label>Notes (optional)<input id="notes" placeholder="Fit, material, brand…"></label><button class="primary wide">Save to wardrobe</button></form></dialog>
+<label>Notes (optional)<input id="notes" placeholder="Fit, material, brand…"></label><button class="primary wide" id="itemSaveButton">Save to wardrobe</button></form></dialog>
 <dialog id="weatherDialog"><form class="dialog" id="weatherForm"><div class="dialog-head"><div class="eyebrow">LOCAL CONDITIONS<h2>Set your weather</h2></div><button type="button" class="plain close" data-close="weatherDialog">×</button></div><label>Town or city<input id="location" placeholder="e.g. Preston"></label><button class="primary wide">Get weather</button></form></dialog>
 <dialog id="detailDialog"><div class="dialog" id="detail"></div></dialog><div id="toast"></div>
 <script src="app.js"></script></body></html>

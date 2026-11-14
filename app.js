@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const KEY="wardrobe.items.v1", DB_NAME="wardrobe-local", DB_VERSION=1;
-let items=[], photo="", filter="All", db=null, lastFlight=null;
+let items=[], photo="", filter="All", db=null, lastFlight=null, editingItemId=null;
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(s){let t=$("#toast");t.textContent=s;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2400)}
 function openDB(){return new Promise((resolve,reject)=>{if(!("indexedDB"in window)){reject(Error("IndexedDB unavailable"));return}let r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{let d=r.result;if(!d.objectStoreNames.contains("items"))d.createObjectStore("items",{keyPath:"id"})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -12,17 +12,47 @@ function go(p){$$(".page").forEach(x=>x.classList.toggle("active",x.id===p));$$(
 $$("nav button").forEach(b=>b.onclick=()=>go(b.dataset.go));
 $("#today").textContent=new Intl.DateTimeFormat(undefined,{weekday:"long",day:"numeric",month:"long"}).format(new Date()).toUpperCase();
 $("#about").onclick=()=>alert("WARDROBE. Clothing photos and details are stored on this iPhone. Use Export backup regularly to keep a copy in Files.");
-function addOpen(){$("#itemForm").reset();photo="";$("#preview").innerHTML="＋";$("#itemDialog").showModal()}
+function addOpen(){
+ editingItemId=null;$("#itemForm").reset();photo="";$("#preview").innerHTML="＋";
+ $("#itemFormTitle").textContent="New wardrobe piece";$("#itemSaveButton").textContent="Save to wardrobe";
+ $("#itemDialog").showModal();
+}
+function editOpen(id){
+ const x=items.find(i=>i.id===id);if(!x)return;
+ editingItemId=id;$("#itemForm").reset();photo=x.photo||"";
+ $("#name").value=x.name||"";$("#category").value=x.category||"Tops";$("#colour").value=x.colour||"";
+ $("#itemStyle").value=x.style||"Versatile";$("#warmth").value=String(x.warmth||2);$("#notes").value=x.notes||"";
+ $("#preview").innerHTML=photo?`<img src="${photo}">`:"＋";
+ $("#itemFormTitle").textContent="Edit wardrobe piece";$("#itemSaveButton").textContent="Save changes";
+ $("#detailDialog").close();$("#itemDialog").showModal();
+}
 $("#add").onclick=$("#firstAdd").onclick=addOpen;
 $("#homeAction").onclick=()=>items.length?go("stylist"):addOpen();
 function compressPhoto(file){return new Promise(resolve=>{let reader=new FileReader();reader.onload=()=>{let img=new Image();img.onload=()=>{try{let max=1400,scale=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext("2d").drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL("image/jpeg",.82))}catch(e){resolve(reader.result)}};img.onerror=()=>resolve(reader.result);img.src=reader.result};reader.onerror=()=>resolve("");reader.readAsDataURL(file)})}
 $("#photo").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;photo=await compressPhoto(f);$("#preview").innerHTML=`<img src="${photo}">`};
-$("#itemForm").onsubmit=async e=>{e.preventDefault();let name=$("#name").value.trim();if(!name)return;items.unshift({id:crypto.randomUUID(),name,category:$("#category").value,colour:$("#colour").value,style:$("#itemStyle").value,warmth:+$("#warmth").value,notes:$("#notes").value,photo});await persistItems();$("#itemDialog").close();render();toast("Added to your wardrobe")};
+$("#itemForm").onsubmit=async e=>{
+ e.preventDefault();let name=$("#name").value.trim();if(!name)return;
+ const values={name,category:$("#category").value,colour:$("#colour").value,style:$("#itemStyle").value,warmth:+$("#warmth").value,notes:$("#notes").value,photo};
+ if(editingItemId){
+   const index=items.findIndex(x=>x.id===editingItemId);
+   if(index>=0)items[index]={...items[index],...values};
+   toast("Wardrobe item updated");
+ }else{
+   items.unshift({id:crypto.randomUUID(),...values});toast("Added to your wardrobe");
+ }
+ editingItemId=null;await persistItems();$("#itemDialog").close();render();
+};
 $$("[data-close]").forEach(b=>b.onclick=()=>$("#"+b.dataset.close).close());
-function render(){let q=$("#search").value.toLowerCase(),list=items.filter(x=>(filter==="All"||x.category===filter)&&`${x.name} ${x.colour} ${x.notes}`.toLowerCase().includes(q));$("#itemsGrid").innerHTML=list.map(x=>`<article class="item" data-id="${x.id}"><div class="item-photo">${x.photo?`<img src="${x.photo}">`:`<span>${esc(x.name[0])}</span>`}</div><div class="item-copy"><b>${esc(x.name)}</b><small>${esc(x.colour||x.category)} · ${esc(x.category)}</small></div></article>`).join("");$("#empty").classList.toggle("show",items.length===0);$("#count").textContent=items.length+" pieces";$("#homeTitle").textContent=items.length?"Your wardrobe is ready":"Build your first outfit";$("#homeDesc").textContent=items.length?`${items.length} pieces ready to style. Choose an occasion and generate a look.`:"Add a few pieces and let your stylist put them together.";$("#homeAction").textContent=items.length?"Style an outfit ↗":"Add clothes ↗";$$(".item").forEach(el=>el.onclick=()=>detail(el.dataset.id));updateStorageStatus()}
+function render(){let q=$("#search").value.toLowerCase(),list=items.filter(x=>(filter==="All"||x.category===filter)&&`${x.name} ${x.colour} ${x.notes}`.toLowerCase().includes(q));$("#itemsGrid").innerHTML=list.map(x=>`<article class="item" data-id="${x.id}"><div class="item-photo">${x.photo?`<img src="${x.photo}">`:`<span>${esc(x.name[0])}</span>`}</div><div class="item-copy"><b>${esc(x.name)}</b><small>${esc(x.colour||x.category)} · ${esc(x.category)}</small>${x.notes?`<small class="item-notes">${esc(x.notes)}</small>`:""}</div></article>`).join("");$("#empty").classList.toggle("show",items.length===0);$("#count").textContent=items.length+" pieces";$("#homeTitle").textContent=items.length?"Your wardrobe is ready":"Build your first outfit";$("#homeDesc").textContent=items.length?`${items.length} pieces ready to style. Choose an occasion and generate a look.`:"Add a few pieces and let your stylist put them together.";$("#homeAction").textContent=items.length?"Style an outfit ↗":"Add clothes ↗";$$(".item").forEach(el=>el.onclick=()=>detail(el.dataset.id));updateStorageStatus()}
 $("#search").oninput=render;
 $$("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.dataset.filter;$$("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));render()});
-function detail(id){let x=items.find(i=>i.id===id);$("#detail").innerHTML=`<div class="dialog-head"><div class="eyebrow">YOUR WARDROBE<h2>${esc(x.name)}</h2></div><button class="plain close" id="detailClose">×</button></div>${x.photo?`<img src="${x.photo}">`:""}<p class="muted">${esc(x.category)} · ${esc(x.colour)} · ${esc(x.style)}</p><p class="muted">${esc(x.notes)}</p><button class="secondary" id="remove">Remove from wardrobe</button>`;$("#detailDialog").showModal();$("#detailClose").onclick=()=>$("#detailDialog").close();$("#remove").onclick=async()=>{items=items.filter(i=>i.id!==id);await persistItems();$("#detailDialog").close();render();toast("Removed")}}
+function detail(id){
+ let x=items.find(i=>i.id===id);if(!x)return;
+ $("#detail").innerHTML=`<div class="dialog-head"><div class="eyebrow">YOUR WARDROBE<h2>${esc(x.name)}</h2></div><button class="plain close" id="detailClose">×</button></div>${x.photo?`<img src="${x.photo}">`:""}<p class="muted">${esc(x.category)} · ${esc(x.colour)} · ${esc(x.style)}</p>${x.notes?`<p class="muted">${esc(x.notes)}</p>`:""}<div class="actions"><button class="primary" id="editItem">Edit item</button><button class="secondary" id="remove">Remove from wardrobe</button></div>`;
+ $("#detailDialog").showModal();$("#detailClose").onclick=()=>$("#detailDialog").close();
+ $("#editItem").onclick=()=>editOpen(id);
+ $("#remove").onclick=async()=>{items=items.filter(i=>i.id!==id);await persistItems();$("#detailDialog").close();render();toast("Removed")};
+}
 $("#exportBackup").onclick=()=>{let backup={app:"WARDROBE",version:2,exportedAt:new Date().toISOString(),items,saved:JSON.parse(localStorage.getItem("wardrobe.saved")||"[]"),inspiration:JSON.parse(localStorage.getItem("wardrobe.inspo")||"[]"),location:localStorage.getItem("wardrobe.location")||""};let blob=new Blob([JSON.stringify(backup)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`WARDROBE-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast("Backup exported — save it in Files")};
 $("#importBackup").onclick=()=>$("#backupFile").click();
 $("#backupFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;try{let b=JSON.parse(await f.text());if(!Array.isArray(b.items))throw Error("This doesn't look like a WARDROBE backup");if(!confirm(`Restore ${b.items.length} clothing items? This replaces the current wardrobe on this iPhone.`))return;items=b.items;await persistItems();localStorage.setItem("wardrobe.saved",JSON.stringify(b.saved||[]));localStorage.setItem("wardrobe.inspo",JSON.stringify(b.inspiration||[]));if(b.location)localStorage.setItem("wardrobe.location",b.location);render();toast("WARDROBE backup restored")}catch(err){toast(err.message||"Could not read that backup")}finally{e.target.value=""}};

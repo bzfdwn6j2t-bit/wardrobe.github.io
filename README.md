@@ -70,3 +70,11 @@ Cloudflare's free Worker plan also has request limits. The Worker is designed fo
 - Weather and activity cues can still trigger practical outerwear.
 
 To update the website, replace the seven website files in your existing GitHub Pages repository. Keep your Cloudflare Worker and its settings unchanged; this release does not require changes to Cloudflare.
+
+
+## Version 8 — wardrobe editing restored
+
+- Tap a wardrobe item to open its details, then choose **Edit item**.
+- Edit its name, category, colour, style, warmth, notes and photo. If you do not choose a new photo, the existing photo is retained.
+- Notes are also displayed directly on wardrobe cards.
+- Existing item IDs and IndexedDB records are retained; edits update the existing record rather than creating a duplicate.

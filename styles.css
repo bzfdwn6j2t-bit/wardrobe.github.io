@@ -15,3 +15,5 @@
 .ai-preview img{display:block;width:100%;max-width:520px;margin:12px auto;border-radius:14px;background:#e8e5df;object-fit:contain}
 .ai-preview-status{font-size:.9rem;color:var(--muted);padding:12px 0}
 .ai-preview-status.failed{color:#a34d42}
+
+.item-notes{display:block;white-space:normal;overflow-wrap:anywhere;opacity:.8;margin-top:4px;line-height:1.35}
