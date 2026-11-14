@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const KEY="wardrobe.items.v1", DB_NAME="wardrobe-local", DB_VERSION=1;
-let items=[], photo="", filter="All", db=null, lastFlight=null, editingItemId=null;
+let items=[], photo="", filter="All", db=null, lastFlight=null, editingItemId=null, lastOutfitReason="";
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(s){let t=$("#toast");t.textContent=s;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2400)}
 function openDB(){return new Promise((resolve,reject)=>{if(!("indexedDB"in window)){reject(Error("IndexedDB unavailable"));return}let r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{let d=r.result;if(!d.objectStoreNames.contains("items"))d.createObjectStore("items",{keyPath:"id"})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -43,7 +43,7 @@ $("#itemForm").onsubmit=async e=>{
  editingItemId=null;await persistItems();$("#itemDialog").close();render();
 };
 $$("[data-close]").forEach(b=>b.onclick=()=>$("#"+b.dataset.close).close());
-function render(){let q=$("#search").value.toLowerCase(),list=items.filter(x=>(filter==="All"||x.category===filter)&&`${x.name} ${x.colour} ${x.notes}`.toLowerCase().includes(q));$("#itemsGrid").innerHTML=list.map(x=>`<article class="item" data-id="${x.id}"><div class="item-photo">${x.photo?`<img src="${x.photo}">`:`<span>${esc(x.name[0])}</span>`}</div><div class="item-copy"><b>${esc(x.name)}</b><small>${esc(x.colour||x.category)} · ${esc(x.category)}</small>${x.notes?`<small class="item-notes">${esc(x.notes)}</small>`:""}</div></article>`).join("");$("#empty").classList.toggle("show",items.length===0);$("#count").textContent=items.length+" pieces";$("#homeTitle").textContent=items.length?"Your wardrobe is ready":"Build your first outfit";$("#homeDesc").textContent=items.length?`${items.length} pieces ready to style. Choose an occasion and generate a look.`:"Add a few pieces and let your stylist put them together.";$("#homeAction").textContent=items.length?"Style an outfit ↗":"Add clothes ↗";$$(".item").forEach(el=>el.onclick=()=>detail(el.dataset.id));updateStorageStatus()}
+function render(){let q=$("#search").value.toLowerCase(),list=items.filter(x=>(filter==="All"||x.category===filter)&&`${x.name} ${x.colour} ${x.notes}`.toLowerCase().includes(q));$("#itemsGrid").innerHTML=list.map(x=>`<article class="item" data-id="${x.id}"><div class="item-photo">${x.photo?`<img src="${x.photo}">`:`<span>${esc(x.name[0])}</span>`}</div><div class="item-copy"><b>${esc(x.name)}</b><small>${esc(x.colour||x.category)} · ${esc(x.category)}</small>${x.notes?`<small class="item-notes">${esc(x.notes)}</small>`:""}<button type="button" class="item-edit" data-edit-id="${esc(x.id)}">Edit item</button></div></article>`).join("");$("#empty").classList.toggle("show",items.length===0);$("#count").textContent=items.length+" pieces";$("#homeTitle").textContent=items.length?"Your wardrobe is ready":"Build your first outfit";$("#homeDesc").textContent=items.length?`${items.length} pieces ready to style. Choose an occasion and generate a look.`:"Add a few pieces and let your stylist put them together.";$("#homeAction").textContent=items.length?"Style an outfit ↗":"Add clothes ↗";$$(".item").forEach(el=>el.onclick=()=>detail(el.dataset.id));$$(".item-edit").forEach(btn=>btn.onclick=e=>{e.stopPropagation();editOpen(btn.dataset.editId)});updateStorageStatus()}
 $("#search").oninput=render;
 $$("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.dataset.filter;$$("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));render()});
 function detail(id){
@@ -55,7 +55,20 @@ function detail(id){
 }
 $("#exportBackup").onclick=()=>{let backup={app:"WARDROBE",version:2,exportedAt:new Date().toISOString(),items,saved:JSON.parse(localStorage.getItem("wardrobe.saved")||"[]"),inspiration:JSON.parse(localStorage.getItem("wardrobe.inspo")||"[]"),location:localStorage.getItem("wardrobe.location")||""};let blob=new Blob([JSON.stringify(backup)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`WARDROBE-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast("Backup exported — save it in Files")};
 $("#importBackup").onclick=()=>$("#backupFile").click();
-$("#backupFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;try{let b=JSON.parse(await f.text());if(!Array.isArray(b.items))throw Error("This doesn't look like a WARDROBE backup");if(!confirm(`Restore ${b.items.length} clothing items? This replaces the current wardrobe on this iPhone.`))return;items=b.items;await persistItems();localStorage.setItem("wardrobe.saved",JSON.stringify(b.saved||[]));localStorage.setItem("wardrobe.inspo",JSON.stringify(b.inspiration||[]));if(b.location)localStorage.setItem("wardrobe.location",b.location);render();toast("WARDROBE backup restored")}catch(err){toast(err.message||"Could not read that backup")}finally{e.target.value=""}};
+$("#backupFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;try{let b=JSON.parse(await f.text());if(!Array.isArray(b.items))throw Error("This doesn't look like a WARDROBE backup");if(!confirm(`Restore ${b.items.length} clothing items? This replaces the current wardrobe on this iPhone.`))return;{
+ const seen=new Set();
+ items=b.items.map((raw,index)=>{
+   const x={...raw};
+   if(!x.id||seen.has(String(x.id)))x.id=crypto.randomUUID();
+   x.id=String(x.id);seen.add(x.id);
+   x.name=String(x.name||`Wardrobe item ${index+1}`);
+   x.category=["Tops","Bottoms","Layers","Shoes","Accessories"].includes(x.category)?x.category:"Tops";
+   x.colour=String(x.colour||"");x.style=String(x.style||"Versatile");
+   x.notes=String(x.notes||"");x.warmth=Number(x.warmth)||2;x.photo=x.photo||"";
+   return x;
+ });
+}
+await persistItems();localStorage.setItem("wardrobe.saved",JSON.stringify(b.saved||[]));localStorage.setItem("wardrobe.inspo",JSON.stringify(b.inspiration||[]));if(b.location)localStorage.setItem("wardrobe.location",b.location);render();toast("WARDROBE backup restored")}catch(err){toast(err.message||"Could not read that backup")}finally{e.target.value=""}};
 const label={Tops:"Top",Bottoms:"Bottoms",Layers:"Layer",Shoes:"Shoes",Accessories:"Finishing touch"};
 const TREND_CUES=[
   {name:"wide-leg proportions",re:/wide.?leg|relaxed fit|loose fit|pleated/i,weight:1.8},
@@ -68,6 +81,87 @@ const TREND_CUES=[
 function trendScore(x){let t=`${x.name} ${x.colour||""} ${x.notes||""}`;return TREND_CUES.reduce((n,c)=>n+(c.re.test(t)?c.weight:0),0)}
 function pickTrendAware(list){if(!list.length)return null;let ranked=[...list].sort((a,b)=>trendScore(b)-trendScore(a));let pool=ranked.slice(0,Math.min(3,ranked.length));return pool[Math.floor(Math.random()*pool.length)]}
 function trendNotes(out){let found=[];for(const x of out){let t=`${x.name} ${x.colour||""} ${x.notes||""}`;for(const cue of TREND_CUES)if(cue.re.test(t)&&!found.includes(cue.name))found.push(cue.name)}return found.slice(0,2)}
+
+
+function colourFamily(value){
+ const s=String(value||"").toLowerCase();
+ const has=(...w)=>w.some(v=>s.includes(v));
+ if(has("olive","sage","khaki green","forest","moss","green"))return "green";
+ if(has("navy","blue","denim","indigo"))return "blue";
+ if(has("cream","ecru","ivory","off-white","off white","white"))return "light-neutral";
+ if(has("stone","beige","sand","tan","camel","khaki"))return "warm-neutral";
+ if(has("brown","chocolate","espresso","cognac","rust","terracotta"))return "earth";
+ if(has("grey","gray","charcoal","silver"))return "grey";
+ if(has("black"))return "black";
+ if(has("burgundy","wine","maroon"))return "burgundy";
+ if(has("pink","red","orange","purple","yellow"))return "accent";
+ return "unknown";
+}
+function garmentFormality(x){
+ const t=`${x.name} ${x.notes||""} ${x.style||""}`.toLowerCase();
+ if(/tuxedo|dinner jacket|suit|formal|dress shoe|oxford shoe|tailored trouser/.test(t))return 4;
+ if(/blazer|loafer|derby|oxford shirt|chino|smart casual|knit polo/.test(t))return 3;
+ if(/overshirt|polo|dark denim|clean sneaker|crew.?neck|jumper|cardigan/.test(t))return 2;
+ if(/hoodie|jogger|running|gym|track|cargo|graphic tee/.test(t))return 1;
+ return ({Formal:4,"Smart casual":3,Versatile:2,Casual:1,Sporty:1}[x.style]??2);
+}
+function paletteScore(top,bottom){
+ const a=colourFamily(top.colour),b=colourFamily(bottom.colour);
+ let score=0,reason="";
+ if(a==="unknown"||b==="unknown"){score+=0;reason="Colour details are incomplete, so compatibility is less certain."}
+ else if(a===b){
+   score-=3;reason="The top and trousers are very similar in colour; tonal dressing needs a deliberate difference in shade or texture.";
+ }else{
+   const pairs=[
+    [["green","light-neutral"],4,"Olive and cream/white create clear, easy contrast."],
+    [["green","blue"],3,"Muted green and blue make a balanced, understated combination."],
+    [["green","grey"],3,"Green and grey keep the palette quiet and balanced."],
+    [["green","warm-neutral"],2,"Earthy green and warm neutrals create a relaxed palette."],
+    [["blue","light-neutral"],4,"Navy/blue with a light neutral gives clear contrast."],
+    [["blue","warm-neutral"],3,"Blue and warm neutrals create a classic contrast."],
+    [["blue","grey"],3,"Blue and grey create a restrained, cohesive palette."],
+    [["warm-neutral","light-neutral"],2,"Warm neutral trousers work with a lighter top when the tones are distinct."],
+    [["earth","light-neutral"],3,"Brown and cream/white make a warm, clean combination."],
+    [["black","light-neutral"],3,"Black and a light neutral create clear contrast."],
+    [["grey","light-neutral"],2,"Grey and a light neutral keep the outfit simple and balanced."],
+    [["burgundy","grey"],2,"Burgundy and grey keep the accent grounded."]
+   ];
+   for(const [pair,val,why] of pairs){if(pair.includes(a)&&pair.includes(b)){score+=val;reason=why;break}}
+   if(!reason){score-=1;reason="This colour pairing needs checking for contrast and undertone."}
+ }
+ // Avoid two saturated statement colours without a neutral bridge.
+ if(a==="accent"&&b==="accent")score-=4;
+ return {score,reason};
+}
+function pairCompatibility(top,bottom,event,activity,style){
+ const palette=paletteScore(top,bottom);
+ let score=palette.score;
+ const f1=garmentFormality(top),f2=garmentFormality(bottom);
+ score-=Math.abs(f1-f2)*1.25;
+ const t=`${event} ${activity}`.toLowerCase();
+ const formal=isFormalActivity(event,activity,style);
+ if(formal){score+=(f1>=3?2:-3)+(f2>=3?2:-3)}
+ else if(/wine tasting|smart casual|restaurant|dinner|date|evening out|brunch/.test(t)){
+   score+=(f1>=2&&f1<=3?1.5:-.5)+(f2>=2&&f2<=3?1.5:-.5);
+   if(/tuxedo|dinner jacket|suit trouser/.test(`${top.name} ${bottom.name}`.toLowerCase()))score-=3;
+ }else if(/gym|run|running|hike|workout|sport/.test(t)){
+   score+=(f1===1?2:-2)+(f2===1?2:-2);
+ }
+ score+=Math.min(1.5,trendScore(top)*.25+trendScore(bottom)*.25);
+ return {...palette,score};
+}
+function chooseBestPair(tops,bottoms,event,activity,style){
+ const pairs=[];
+ for(const top of tops)for(const bottom of bottoms){
+   const c=pairCompatibility(top,bottom,event,activity,style);
+   pairs.push({top,bottom,...c});
+ }
+ pairs.sort((a,b)=>b.score-a.score);
+ if(!pairs.length)return {top:pickTrendAware(tops),bottom:pickTrendAware(bottoms),reason:"Not enough wardrobe options to compare combinations."};
+ const best=pairs[0],near=pairs.filter(p=>p.score>=best.score-1);
+ const chosen=near[Math.floor(Math.random()*Math.min(2,near.length))]||best;
+ return {...chosen,reason:chosen.reason};
+}
 
 function isBlazer(x){return /blazer|suit jacket|dinner jacket|tuxedo/i.test(`${x.name} ${x.notes||""}`)}
 function isFormalActivity(event,activity,style){
@@ -85,33 +179,43 @@ function layerScore(x,formal,cold,weather){
  return score;
 }
 function choose(event,temp,cond,style,activity=""){
- let by=c=>items.filter(x=>x.category===c),pick=pickTrendAware;
- let top=pick(by("Tops")),bottom=pick(by("Bottoms")),layers=by("Layers"),shoe=pick(by("Shoes")),acc=pick(by("Accessories"));
- let out=[top,bottom].filter(Boolean),formal=isFormalActivity(event,activity,style),cold=temp<=12;
- // Layers are optional. Add one only when weather or the described activity justifies it.
- let needsLayer=cold||cond==="rain"||cond==="wind"||(/\b(outdoors|outside|boat|coastal|evening|late|open air|walk|hike)\b/i.test(activity)&&temp<18)||formal;
+ let by=c=>items.filter(x=>x.category===c),layers=by("Layers"),tops=by("Tops"),bottoms=by("Bottoms");
+ const pair=chooseBestPair(tops,bottoms,event,activity,style);
+ let out=[pair.top,pair.bottom].filter(Boolean),formal=isFormalActivity(event,activity,style),cold=temp<=12;
+ let reasons=[pair.reason];
+ // Choose footwear compatible with both the dress code and palette, not at random.
+ const shoes=by("Shoes");
+ if(shoes.length&&pair.top&&pair.bottom){
+   shoes.sort((a,b)=>{
+     const shoeScore=x=>{
+       let s=-Math.abs(garmentFormality(x)-Math.round((garmentFormality(pair.top)+garmentFormality(pair.bottom))/2))*1.8;
+       const c=colourFamily(x.colour),bottom=colourFamily(pair.bottom.colour);
+       if(["brown","earth","warm-neutral","black"].includes(c))s+=1;
+       if(c==="light-neutral"&&bottom!=="light-neutral")s+=.8;
+       if(formal&&garmentFormality(x)>=3)s+=3;
+       if(!formal&&garmentFormality(x)<=2)s+=1;
+       return s+trendScore(x)*.1;
+     };return shoeScore(b)-shoeScore(a);
+   });
+   out.push(shoes[0]);
+ }
+ // Layers are optional. Add only when temperature, weather or a genuinely formal setting calls for one.
+ let needsLayer=cold||cond==="rain"||cond==="wind"||(/\b(outdoors|outside|boat|coastal|open air|walk|hike)\b/i.test(activity)&&temp<18)||formal;
  if(needsLayer&&layers.length){
    let candidates=layers.filter(x=>formal||cold||!isBlazer(x));
-   if(!candidates.length)candidates=layers.filter(x=>!isBlazer(x));
-   if(candidates.length){
-     candidates.sort((a,b)=>layerScore(b,formal,cold,cond)-layerScore(a,formal,cold,cond));
-     let chosen=candidates[0];
-     // A suit blazer is reserved for formal settings, or genuinely cold weather.
-     if(isBlazer(chosen)&&!formal&&!cold)chosen=null;
-     if(chosen)out.push(chosen);
-   }
+   candidates.sort((a,b)=>layerScore(b,formal,cold,cond)-layerScore(a,formal,cold,cond));
+   let chosen=candidates[0];
+   if(chosen&&(!isBlazer(chosen)||formal||cold)){out.push(chosen);reasons.push(`A ${chosen.name} is included for ${formal?"the formal setting":cold?"the colder temperature":cond==="rain"?"rain protection":cond==="wind"?"wind protection":"the outdoor activity"}.`)}
  }
- if(shoe)out.push(shoe);
- if(acc&&Math.random()>.5)out.push(acc);
  const smartCasual=/smart casual|wine tasting|brunch|casual dinner|pub|restaurant/i.test(`${event} ${activity}`);
- if(smartCasual&&!formal){
-   out=out.filter(x=>!isBlazer(x));
- }
+ if(smartCasual&&!formal)out=out.filter(x=>!isBlazer(x));
+ const accessories=by("Accessories");
+ if(accessories.length&&Math.random()>.7)out.push(pickTrendAware(accessories));
  if(style==="smart"||formal||["Work","Date night"].includes(event))
    out.sort((a,b)=>({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[a.style]??2)-({Formal:0,"Smart casual":1,Versatile:2,Casual:3,Sporty:4}[b.style]??2));
+ lastOutfitReason=reasons.filter(Boolean).join(" ");
  return out;
 }
-
 
 const AI_CONFIG_KEY="wardrobe.ai.connection.v1";
 function readAIConfig(){try{return JSON.parse(localStorage.getItem(AI_CONFIG_KEY)||"{}")}catch(e){return {}}}
@@ -148,7 +252,7 @@ $("#generate").onclick=async()=>{
  let cues=trendNotes(out),prompt=makeMannequinPrompt(out,event,temp,cond,activity);
  const pieces=out.map(x=>`<div class="outfit-piece"><div class="thumb">${x.photo?`<img src="${x.photo}" alt="${esc(x.name)}">`:"◇"}</div><div><small>${label[x.category]}</small><b>${esc(x.name)}</b><small>${esc(x.colour||x.style)}</small></div></div>`).join("");
  $("#outfit").classList.remove("hidden");
- $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware":cond==="cold"?"Cold-weather":cond==="hot"?"Warm-weather":"Weather-balanced"} · ${activity?esc(activity):"Everyday styling"}</p><div class="ai-preview"><div class="eyebrow">AI MANNEQUIN PREVIEW</div><div class="ai-preview-status" id="aiPreviewStatus">Preparing your outfit illustration…</div><img id="aiMannequinImage" alt="AI-generated mannequin wearing the selected outfit" hidden><p class="fine">Generated from clothing names, colours and details. It is an interpretation, not an exact digital fitting. Your clothing photos are not sent to the AI service.</p></div><div class="eyebrow">THE PIECES SELECTED</div>${pieces}${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
+ $("#outfit").innerHTML=`<div class="eyebrow">YOUR LOOK · ${esc(event.toUpperCase())}</div><h2>Considered, not complicated.</h2><p class="fine">${esc(lastOutfitReason)}</p><p class="muted">${temp}°C · ${cond==="rain"?"Rain-aware":cond==="cold"?"Cold-weather":cond==="hot"?"Warm-weather":"Weather-balanced"} · ${activity?esc(activity):"Everyday styling"}</p><div class="ai-preview"><div class="eyebrow">AI MANNEQUIN PREVIEW</div><div class="ai-preview-status" id="aiPreviewStatus">Preparing your outfit illustration…</div><img id="aiMannequinImage" alt="AI-generated mannequin wearing the selected outfit" hidden><p class="fine">Generated from clothing names, colours and details. It is an interpretation, not an exact digital fitting. Your clothing photos are not sent to the AI service.</p></div><div class="eyebrow">THE PIECES SELECTED</div>${pieces}${cues.length?`<div class="trend-note"><b>ON-TREND DETAIL</b><p>${esc(cues.join(" · "))}</p><small>Matched to current menswear trend coverage, while prioritising pieces you own.</small></div>`:""}<div class="actions"><button class="primary" id="again">Try another ↻</button><button class="secondary" id="saveLook">Save this look ♡</button></div>`;
  $("#again").onclick=()=>$("#generate").click();
  $("#saveLook").onclick=()=>{let saved=JSON.parse(localStorage.getItem("wardrobe.saved")||"[]");saved.unshift({event,ids:out.map(x=>x.id),date:new Date().toISOString(),mockupPrompt:prompt});localStorage.setItem("wardrobe.saved",JSON.stringify(saved));toast("Look saved")};
  const status=$("#aiPreviewStatus"),img=$("#aiMannequinImage");

@@ -78,3 +78,20 @@ To update the website, replace the seven website files in your existing GitHub P
 - Edit its name, category, colour, style, warmth, notes and photo. If you do not choose a new photo, the existing photo is retained.
 - Notes are also displayed directly on wardrobe cards.
 - Existing item IDs and IndexedDB records are retained; edits update the existing record rather than creating a duplicate.
+
+
+## Version 9 — reliable editing and compatibility-aware styling
+
+- Each wardrobe card now has a visible **Edit item** action; tapping the card still opens its detail view.
+- Restored backup items are normalised on import (stable unique IDs and safe defaults for missing fields) so they remain editable.
+- Outfit selection now scores top/bottom pairs for colour contrast, formality and occasion before choosing; shoes are selected for dress-code compatibility rather than at random.
+- Olive combinations are guided by menswear advice: olive trousers are commonly paired with cream/white, navy, pale blue and grey; avoid near-identical green-on-green unless clearly tonal. The generator uses these as starting heuristics, not absolute rules.
+- The chosen outfit includes a short explanation of its palette and any weather/activity layer.
+
+### Styling research used as inspiration
+- Quietly Well Dressed, “What Colours Go With Olive Green Pants?” (updated 3 October 2026): https://quietlywelldressed.com/journal/what-colours-go-with-olive-green-pants-men
+- Smart Casual Attire, “Smart Casual Color Combinations That Always Work”: https://www.smartcasualattire.com/what-to-wear/colour/colour-combinations-smart-casual/
+- Jos. A. Bank, “How to Wear Chinos” (2026): https://www.josbank.com/blog/how-to-wear-chinos/
+- John Lewis & Partners, “Guide to Smart Casual Dressing for Men” (2026): https://www.johnlewis.com/content/fashion/men/guide-to-smart-casual-dressing-for-men
+
+These are inspiration sources for compatibility heuristics, not a guarantee that any one pairing will suit every shade, cut or personal preference.
